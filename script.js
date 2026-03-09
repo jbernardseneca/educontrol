@@ -182,7 +182,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const userDoc = await db.collection('users').doc(uid).get();
             if (!userDoc.exists) {
                 await auth.signOut();
-                errorMsg.innerText = 'Usuario sin perfil configurado. Contacta al administrador.';
+                errorMsg.innerText = `⚠️ Sin perfil. UID del usuario: ${uid} — Cópielo y úselo como Document ID en Firestore → users`;
                 errorMsg.style.display = 'block';
                 showLoadingState(false);
                 return;
