@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Escolar</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        #services-batch-table {
+            font-size: 0.75rem;
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        #services-batch-table th,
+        #services-batch-table td {
+            padding: 4px 6px;
+        }
+
+        #services-batch-table .form-select,
+        #services-batch-table input {
+            font-size: 0.75rem;
+            padding: 2px 4px;
+            height: auto;
+            border-radius: 4px;
+        }
+
+        #services-batch-table-body td {
+            vertical-align: middle;
+        }
+
+        .stat-card {
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        /* --- LOGIN STYLES --- */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .login-header {
+            margin-bottom: 30px;
+        }
+
+        .login-header i {
+            font-size: 3rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+
+        .login-header h2 {
+            color: #1e293b;
+            margin: 0;
+            font-size: 1.5rem;
+        }
+
+        .login-form .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .login-btn:hover {
+            background: var(--primary-dark, #0b6c93);
+        }
+
+        .login-error {
+            color: #ef4444;
+            font-size: 0.85rem;
+            margin-top: 10px;
+            display: none;
+        }
+
+        /* --- ESTILOS PADRES (Solo Lectura) --- */
+        .padre-readonly-mode .sidebar {
+            display: none !important;
+        }
+
+        .padre-readonly-mode .content {
+            margin-left: 0 !important;
+            width: 100% !important;
+        }
+
+        .padre-readonly-mode .search-bar {
+            display: none;
+        }
+
+        .hidden-by-role {
+            display: none !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="dashboard" id="main-app-container" style="display: none;">
+        <aside class="sidebar" id="main-sidebar">
+            <div class="logo">
+                <i class="fas fa-graduation-cap"></i>
+                <h2>EduControl</h2>
+            </div>
+            <nav id="main-nav">
+                <ul>
+                    <li class="active" id="nav-home"><a href="#"><i class="fas fa-home"></i> <span>Inicio</span></a>
+                    </li>
+                    <li id="nav-students"><a href="#"><i class="fas fa-user-graduate"></i> <span>Alumnos</span></a></li>
+                    <li id="nav-teachers"><a href="#"><i class="fas fa-chalkboard-teacher"></i>
+                            <span>Profesores</span></a></li>
+                    <li id="nav-tutors"><a href="#"><i class="fas fa-users-cog"></i> <span>Tutores</span></a></li>
+                    <li id="nav-courses"><a href="#"><i class="fas fa-book"></i> <span>Materias/Grados</span></a></li>
+                    <li id="nav-payments"><a href="#"><i class="fas fa-cash-register"></i> <span>Caja /
+                                Ingresos</span></a>
+                    </li>
+                    <li id="nav-expenses"><a href="#"><i class="fas fa-file-invoice-dollar"></i> <span>Gastos /
+                                Egresos</span></a></li>
+                    <li id="nav-services"><a href="#"><i class="fas fa-concierge-bell"></i> <span>Servicios /
+                                Lote</span></a></li>
+                    <li id="nav-reports"><a href="#"><i class="fas fa-chart-bar"></i> <span>Reportes
+                                Financieros</span></a></li>
+                    <li id="nav-settings"><a href="#"><i class="fas fa-cog"></i> <span>Configuración</span></a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <main class="content">
+            <header>
+                <div class="search-bar" id="top-search-bar">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Buscar alumnos, cursos...">
+                </div>
+                <div class="user-profile">
+                    <span class="notification"><i class="fas fa-bell"></i></span>
+                    <img src="https://ui-avatars.com/api/?name=Admin+User&background=0D8ABC&color=fff" alt="User"
+                        id="header-user-avatar">
+                    <span id="header-user-name" style="margin-right: 15px;">Administrador</span>
+                    <button onclick="logout()" title="Cerrar Sesión"
+                        style="background:none; border:none; color:#ef4444; font-size:1.2rem; cursor:pointer;"><i
+                            class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </header>
+
+            <!-- Dashboard Home Container -->
+            <div id="dashboard-home">
+                <!-- Bienvenido y Frase del día -->
+                <div id="welcome-section" class="welcome-card">
+                    <div class="welcome-text">
+                        <h1 id="welcome-title">Bienvenido al Sistema Escolar</h1>
+                        <p id="daily-quote" class="philosophical-quote">"Cualquier parte del tiempo que pasa es
+                            propiedad de la muerte." - Séneca</p>
+                    </div>
+                    <div class="welcome-icon">
+                        <i class="fas fa-sun"></i>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <section class="stats-grid">
+                    <div class="stat-card" onclick="showStudents()">
+                        <div class="stat-icon"><i class="fas fa-users"></i></div>
+                        <div class="stat-info">
+                            <h3>Total Alumnos</h3>
+                            <p id="total-students">1,250</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="showTeachers()">
+                        <div class="stat-icon"><i class="fas fa-chalkboard-teacher"></i></div>
+                        <div class="stat-info">
+                            <h3>Profesores</h3>
+                            <p id="total-teachers">85</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="showSubjects()">
+                        <div class="stat-icon"><i class="fas fa-book-open"></i></div>
+                        <div class="stat-info">
+                            <h3>Cursos Activos</h3>
+                            <p id="total-courses">42</p>
+                        </div>
+                    </div>
+                    <div class="stat-card" onclick="showReports()">
+                        <div class="stat-icon"><i class="fas fa-dollar-sign"></i></div>
+                        <div class="stat-info">
+                            <h3>Ingresos Mensuales</h3>
+                            <p id="monthly-revenue">$45,000</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <section class="recent-activity">
+                <div class="section-header">
+                    <h2 id="view-title">Materias Asignadas</h2>
+                    <div class="header-actions">
+                        <select id="group-filter" class="form-select" style="display: none;">
+                            <option value="all">Todos los registros</option>
+                            <option value="Preescolar">Preescolar</option>
+                            <option value="Primaria">Primaria</option>
+                            <option value="Secundaria">Secundaria</option>
+                            <option value="Bachillerato">Bachillerato</option>
+                        </select>
+                        <button id="btn-batch-capture" class="btn-secondary" style="display: none;"
+                            onclick="showBatchCapture()"><i class="fas fa-layer-group"></i> Captura por Lote</button>
+                        <button id="btn-back" class="btn-secondary" style="display: none;"><i
+                                class="fas fa-arrow-left"></i> Volver a Materias</button>
+                    </div>
+                </div>
+
+                <!-- Sección de Caja / Pagos (Nueva) -->
+                <div id="payments-capture-container" class="table-container" style="display: none; padding: 30px;">
+                    <div class="section-header">
+                        <h2 style="color: var(--primary);"><i class="fas fa-receipt"></i> Nueva Operación de Caja</h2>
+                    </div>
+
+                    <div class="payment-form-grid"
+                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 20px;">
+                        <!-- Datos del Alumno -->
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Buscar Alumno</label>
+                            <input type="text" id="pay-student-search" list="students-datalist" class="form-select"
+                                style="width: 100%;" placeholder="Escriba nombre del alumno..."
+                                onchange="onPaymentStudentSelect(this.value)">
+                            <datalist id="students-datalist">
+                                <!-- JS populate -->
+                            </datalist>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Grado / Grupo</label>
+                            <input type="text" id="pay-student-grade" class="form-select"
+                                style="width: 100%; background: #f1f5f9;" readonly placeholder="Grado detectado">
+                        </div>
+
+                        <!-- Conceptos -->
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Concepto de
+                                Pago</label>
+                            <select id="pay-concept" class="form-select" style="width: 100%;"
+                                onchange="toggleOtherConcept(this.value)">
+                                <option value="">Seleccione concepto...</option>
+                                <option value="Inscripción">Inscripción</option>
+                                <option value="Gastos de Apoyo">Gastos de Apoyo</option>
+                                <option value="Seguro Escolar">Seguro Escolar</option>
+                                <option value="Colegiatura">Colegiatura Mensual</option>
+                                <option value="Uniformes">Uniformes</option>
+                                <option value="Libros">Libros</option>
+                                <option value="Otros">Otros (Especificar)</option>
+                            </select>
+                        </div>
+
+                        <div id="other-concept-div" class="form-group" style="display: none;">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Especifique
+                                Concepto</label>
+                            <input type="text" id="pay-concept-other" class="form-select"
+                                style="width: 100%; border-color: var(--primary-light);"
+                                placeholder="Ej. Viaje de estudios">
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Importe a Pagar
+                                ($)</label>
+                            <input type="number" id="pay-amount" class="form-select"
+                                style="width: 100%; font-size: 1.2rem; font-weight: 700; color: #059669;"
+                                placeholder="0.00">
+                        </div>
+
+                        <!-- Mes (Solo si es colegiatura) -->
+                        <div id="month-select-div" class="form-group" style="display: none;">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Mes
+                                Correspondiente</label>
+                            <select id="pay-month" class="form-select" style="width: 100%;">
+                                <option value="Enero">Enero</option>
+                                <option value="Febrero">Febrero</option>
+                                <option value="Marzo">Marzo</option>
+                                <option value="Abril">Abril</option>
+                                <option value="Mayo">Mayo</option>
+                                <option value="Junio">Junio</option>
+                                <option value="Julio">Julio</option>
+                                <option value="Agosto">Agosto</option>
+                                <option value="Septiembre">Septiembre</option>
+                                <option value="Octubre">Octubre</option>
+                                <option value="Noviembre">Noviembre</option>
+                                <option value="Diciembre">Diciembre</option>
+                            </select>
+                        </div>
+
+                        <!-- Forma de Pago y Receptor (Nuevos) -->
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Forma de Pago</label>
+                            <select id="pay-method" class="form-select" style="width: 100%;">
+                                <option value="Efectivo">Efectivo</option>
+                                <option value="Tarjeta">Tarjeta (Débito/Crédito)</option>
+                                <option value="Transferencia">Transferencia Bancaria</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Recibe Pago
+                                (Caja/Personal)</label>
+                            <select id="pay-receiver" class="form-select" style="width: 100%;">
+                                <option value="Recepción">Recepción</option>
+                                <option value="José Bernardo">José Bernardo</option>
+                                <option value="Georgina A">Georgina A</option>
+                                <option value="Banorte">Banorte</option>
+                                <option value="Mercado Pago">Mercado Pago</option>
+                                <option value="Otros">Otros</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div
+                        style="margin-top: 40px; display: flex; justify-content: flex-end; gap: 15px; border-top: 1px solid #e2e8f0; padding-top: 25px;">
+                        <button class="btn-secondary" onclick="resetPaymentForm()"><i class="fas fa-eraser"></i> Limpiar
+                            Formulario</button>
+                        <button class="btn-primary"
+                            style="background: var(--primary); color: white; border: none; padding: 12px 35px; border-radius: 8px; font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 10px;"
+                            onclick="processPayment()">
+                            <i class="fas fa-file-invoice-dollar"></i> Procesar y Generar Folio
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sección de Reportes Financieros (Nueva) -->
+                <div id="reports-container" class="table-container" style="display: none; padding: 30px;">
+                    <div class="section-header" style="margin-bottom: 25px;">
+                        <h2 style="color: var(--primary);"><i class="fas fa-chart-line"></i> Reporte de Saldos y Cajas
+                        </h2>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-secondary" onclick="showTransferModal()"
+                                style="background:#fef3c7; color:#92400e; border-color:#f59e0b;">
+                                <i class="fas fa-exchange-alt"></i> Transferencia entre Cajas
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="box-balances-grid"
+                        style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px;">
+                        <!-- JS Populate -->
+                    </div>
+
+                    <div class="expediente-section">
+                        <h4>Estado de Cuenta por Caja</h4>
+                        <div
+                            style="margin-bottom: 15px; display: flex; gap: 15px; align-items: flex-end; flex-wrap: wrap; background: #f8fafc; padding: 15px; border-radius: 8px;">
+                            <div class="form-group">
+                                <label style="display:block; font-size: 0.8rem; font-weight: 600;">Caja / Banco:</label>
+                                <select id="report-box-filter" class="form-select" onchange="updateBoxReport()">
+                                    <option value="Todas">Todas las Cajas</option>
+                                    <option value="SOLO_BANCOS">Solo Bancos (Banorte/MP)</option>
+                                    <option value="Recepción">Recepción</option>
+                                    <option value="José Bernardo">José Bernardo</option>
+                                    <option value="Georgina A">Georgina A</option>
+                                    <option value="Banorte">Banorte</option>
+                                    <option value="Mercado Pago">Mercado Pago</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label style="display:block; font-size: 0.8rem; font-weight: 600;">Desde:</label>
+                                <input type="date" id="report-date-start" class="form-select"
+                                    onchange="updateBoxReport()">
+                            </div>
+                            <div class="form-group">
+                                <label style="display:block; font-size: 0.8rem; font-weight: 600;">Hasta:</label>
+                                <input type="date" id="report-date-end" class="form-select"
+                                    onchange="updateBoxReport()">
+                            </div>
+                            <div class="form-group" style="flex-grow: 1;">
+                                <label style="display:block; font-size: 0.8rem; font-weight: 600;">Alumno:</label>
+                                <input type="text" id="report-student-filter" list="students-datalist"
+                                    class="form-select" style="width: 100%;" placeholder="Todos los alumnos"
+                                    oninput="updateBoxReport()">
+                            </div>
+                            <div class="form-group">
+                                <label style="display:block; font-size: 0.8rem; font-weight: 600;">Concepto:</label>
+                                <select id="report-concept-filter" class="form-select" onchange="updateBoxReport()">
+                                    <option value="Todos">Todos</option>
+                                    <option value="Inscripción">Inscripción</option>
+                                    <option value="Colegiatura">Colegiatura</option>
+                                    <option value="Seguro Escolar">Seguro Escolar</option>
+                                    <option value="Gastos Apoyo">Gastos Apoyo</option>
+                                    <option value="Libros">Libros</option>
+                                    <option value="Uniformes">Uniformes</option>
+                                    <option value="Otros">Otros</option>
+                                    <option value="TRANSFERENCIA">Transferencias</option>
+                                </select>
+                            </div>
+                        </div>
+                        <table style="width: 100%;" id="box-transactions-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Caja</th>
+                                    <th>Concepto</th>
+                                    <th>Entrada</th>
+                                    <th>Salida</th>
+                                    <th>Saldo Actual</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="box-transactions-body">
+                                <!-- JS Populate -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Modal de Transferencia -->
+                <div id="transfer-modal" class="modal"
+                    style="display:none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="modal-content"
+                        style="background: white; padding: 30px; border-radius: 12px; width: 450px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);">
+                        <h3 style="margin-bottom: 20px; color: var(--primary);"><i class="fas fa-exchange-alt"></i>
+                            Transferencia entre Cajas</h3>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Caja Origen:</label>
+                            <select id="transfer-from" class="form-select" style="width: 100%;">
+                                <option value="Recepción">Recepción</option>
+                                <option value="José Bernardo">José Bernardo</option>
+                                <option value="Georgina A">Georgina A</option>
+                                <option value="Banorte">Banorte</option>
+                                <option value="Mercado Pago">Mercado Pago</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 15px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Caja Destino:</label>
+                            <select id="transfer-to" class="form-select" style="width: 100%;">
+                                <option value="Banorte">Banorte</option>
+                                <option value="Recepción">Recepción</option>
+                                <option value="José Bernardo">José Bernardo</option>
+                                <option value="Georgina A">Georgina A</option>
+                                <option value="Mercado Pago">Mercado Pago</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 20px;">
+                            <label style="display:block; margin-bottom:5px; font-weight:600;">Importe ($):</label>
+                            <input type="number" id="transfer-amount" class="form-select" style="width: 100%;"
+                                placeholder="0.00">
+                        </div>
+
+                        <div style="display:flex; justify-content: flex-end; gap: 10px;">
+                            <button class="btn-secondary" onclick="closeTransferModal()">Cancelar</button>
+                            <button class="btn-primary" onclick="processTransfer()">Ejecutar Transferencia</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Contenedor Tabla Principal -->
+                <div id="main-table-container" class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nombre Completo</th>
+                                <th>Nivel</th>
+                                <th>Grado</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activity-table-body">
+                            <!-- JS populate -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Vista de Módulo de Gastos / Egresos -->
+                <div id="expenses-container" style="display: none;">
+                    <div class="card" style="margin-bottom: 20px;">
+                        <div class="card-header">
+                            <h3>Registrar Nuevo Gasto / Pago</h3>
+                        </div>
+                        <div class="card-body">
+                            <form id="expense-form" onsubmit="window.processExpense(event)"
+                                style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                                <input type="text" id="expense-concept" class="form-input"
+                                    placeholder="Concepto (ej. Pago Internet, Honorarios)..." required>
+                                <input type="text" id="expense-receiver" class="form-input"
+                                    placeholder="Proveedor / Maestro..." required>
+                                <input type="number" id="expense-amount" class="form-input" placeholder="Monto ($)"
+                                    min="1" step="0.01" required>
+                                <input type="date" id="expense-date" class="form-input" required>
+                                <select id="expense-box" class="form-select" required>
+                                    <option value="">-- Seleccionar Caja Origen --</option>
+                                    <option value="Recepción">Recepción (Efectivo)</option>
+                                    <option value="Banorte">Banorte</option>
+                                    <option value="Mercado Pago">Mercado Pago</option>
+                                    <option value="Otros">Otros</option>
+                                </select>
+                                <button type="submit" class="btn-primary" style="grid-column: 1 / -1;"><i
+                                        class="fas fa-minus-circle"></i> Registrar Gasto</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"
+                            style="display:flex; justify-content:space-between; align-items:center;">
+                            <h3>Últimos Gastos Registrados</h3>
+                        </div>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th>Concepto</th>
+                                    <th>Proveedor/Beneficiario</th>
+                                    <th>Caja</th>
+                                    <th>Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody id="expenses-table-body">
+                                <!-- Llenado por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Vista de Módulo de Servicios / Lote -->
+                <!-- Contenedor Captura por Lote -->
+                <div id="batch-capture-container" class="table-container" style="display: none; padding: 25px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h3 style="color: var(--primary);"><i class="fas fa-edit"></i> Ingreso Masivo de Alumnos</h3>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="btn-secondary"
+                                style="background-color: #f0f7ff; border-color: var(--primary); color: var(--primary);"
+                                onclick="downloadExcelTemplate()">
+                                <i class="fas fa-download"></i> Formato Excel
+                            </button>
+                            <button class="btn-secondary"
+                                style="background-color: #e6fffa; border-color: #319795; color: #319795;"
+                                onclick="importFromGoogleSheets()">
+                                <i class="fab fa-google-drive"></i> Desde Google Sheet
+                            </button>
+                            <button class="btn-secondary"
+                                style="background-color: #f0fdf4; border-color: #166534; color: #166534;"
+                                onclick="document.getElementById('excel-upload').click()">
+                                <i class="fas fa-file-excel"></i> Importar Excel
+                            </button>
+                            <input type="file" id="excel-upload" style="display: none;" accept=".xlsx, .xls"
+                                onchange="importFromExcel(event)">
+                            <button class="btn-secondary" onclick="addBatchRow()"><i class="fas fa-plus"></i> Añadir
+                                otra fila</button>
+                        </div>
+                    </div>
+                    <table id="batch-table">
+                        <thead>
+                            <tr>
+                                <th>Grado</th>
+                                <th>Nivel Inglés</th>
+                                <th>Tel. Tutor</th>
+                                <th>Nombre</th>
+                                <th>2do Nombre</th>
+                                <th>1er Apellido</th>
+                                <th>2do Apellido</th>
+                                <th>Inscripción</th>
+                                <th>G. Apoyo</th>
+                                <th>Seguro</th>
+                                <th>Eliminar</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batch-table-body">
+                            <!-- Rows added via JS -->
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 25px; display: flex; gap: 12px; justify-content: flex-end;">
+                        <button class="btn-secondary" style="border-color: #ef4444; color: #ef4444;"
+                            onclick="cancelBatch()"><i class="fas fa-times"></i> Cancelar Captura</button>
+                        <button class="btn-primary"
+                            style="background: #10b981; color: white; border: none; padding: 10px 25px; border-radius: 8px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+                            onclick="saveBatch()"><i class="fas fa-save"></i> Guardar Todo el Lote</button>
+                    </div>
+                </div>
+
+                <div id="services-batch-container" class="table-container" style="display: none; padding: 25px;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; border-bottom: 2px solid #f1f5f9; padding-bottom: 20px;">
+                        <div>
+                            <h3 style="color: var(--primary);"><i class="fas fa-concierge-bell"></i> Cobro Masivo por
+                                Concepto</h3>
+                            <div style="margin-top: 15px; display: flex; gap: 20px; align-items: flex-end;">
+                                <div class="form-group" style="margin:0">
+                                    <label style="display:block; font-size: 0.8rem; font-weight: 600;">Seleccione
+                                        Concepto a Capturar:</label>
+                                    <select id="services-batch-global-concept" class="form-select"
+                                        style="min-width: 200px;" onchange="toggleBatchMonthSelect(this.value)">
+                                        <option value="Inscripción">Inscripción</option>
+                                        <option value="Colegiatura">Colegiatura Mensual</option>
+                                        <option value="Seguro Escolar">Seguro Escolar</option>
+                                        <option value="Gastos Apoyo">Gastos Apoyo</option>
+                                        <option value="Libros">Libros</option>
+                                        <option value="Uniformes">Uniformes</option>
+                                        <option value="Otros">Otros</option>
+                                    </select>
+                                </div>
+                                <div id="batch-month-select-div" class="form-group" style="margin:0; display:none;">
+                                    <label style="display:block; font-size: 0.8rem; font-weight: 600;">Mes:</label>
+                                    <select id="services-batch-global-month" class="form-select">
+                                        <option value="Enero">Enero</option>
+                                        <option value="Febrero">Febrero</option>
+                                        <option value="Marzo">Marzo</option>
+                                        <option value="Abril">Abril</option>
+                                        <option value="Mayo">Mayo</option>
+                                        <option value="Junio">Junio</option>
+                                        <option value="Julio">Julio</option>
+                                        <option value="Agosto">Agosto</option>
+                                        <option value="Septiembre">Septiembre</option>
+                                        <option value="Octubre">Octubre</option>
+                                        <option value="Noviembre">Noviembre</option>
+                                        <option value="Diciembre">Diciembre</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 10px; margin-top: 25px;">
+                            <button class="btn-secondary"
+                                style="background:#f0fdf4; color:#166534; border-color:#166534;"
+                                onclick="downloadServiceExcelTemplate()">
+                                <i class="fas fa-download"></i> Plantilla Excel
+                            </button>
+                            <button class="btn-secondary"
+                                style="background:#f0fdf4; color:#166534; border-color:#166534;"
+                                onclick="document.getElementById('service-excel-upload').click()">
+                                <i class="fas fa-file-excel"></i> Importar Excel
+                            </button>
+                            <input type="file" id="service-excel-upload" style="display: none;" accept=".xlsx, .xls"
+                                onchange="importServiceFromExcel(event)">
+                            <button class="btn-secondary" onclick="addServiceBatchRow()"><i class="fas fa-plus"></i>
+                                Añadir Pago</button>
+                        </div>
+                    </div>
+                    <table id="services-batch-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 220px;">Alumno</th>
+                                <th id="batch-table-concept-header" style="width: 130px;">Concepto</th>
+                                <th style="width: 80px;">Cotizado</th>
+                                <th style="width: 80px;">Descuento</th>
+                                <th style="width: 80px;">Pagado</th>
+                                <th style="width: 80px;">Saldo</th>
+                                <th style="width: 100px;">Fecha Pago</th>
+                                <th style="width: 90px;">Folio</th>
+                                <th style="width: 100px;">Forma Pago</th>
+                                <th style="width: 100px;">Recibe</th>
+                                <th style="width: 30px;">X</th>
+                            </tr>
+                        </thead>
+                        <tbody id="services-batch-body">
+                            <!-- Rows via JS -->
+                        </tbody>
+                    </table>
+                    <div style="margin-top: 25px; display: flex; gap: 12px; justify-content: flex-end;">
+                        <button class="btn-secondary" style="border-color: #ef4444; color: #ef4444;"
+                            onclick="showStudents()">Cancelar</button>
+                        <button class="btn-primary" style="background: #10b981; color: white;"
+                            onclick="saveServicesBatch()">
+                            <i class="fas fa-check-circle"></i> Procesar Todos los Pagos
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal de Expediente de Alumno -->
+    <div id="student-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-student-name">Nombre del Alumno</h2>
+                <span class="close-modal" onclick="closeStudentModal()"
+                    style="font-size: 28px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="student-info-brief">
+                    <p><strong>Nivel:</strong> <span id="modal-student-level"></span></p>
+                    <p><strong>Grado:</strong> <span id="modal-student-grade"></span></p>
+                </div>
+                <div class="modal-tabs">
+                    <button class="tab-btn active" onclick="switchTab('grades')"><i class="fas fa-file-invoice"></i>
+                        Calificaciones</button>
+                    <button class="tab-btn" onclick="switchTab('payments')"><i class="fas fa-credit-card"></i>
+                        Estado de Cuenta</button>
+                    <button class="tab-btn" onclick="switchTab('digital')"><i class="fas fa-folder-open"></i>
+                        Documentación</button>
+                    <button class="tab-btn" onclick="switchTab('chat')"><i class="fas fa-comments"></i> Chat
+                        Directivo</button>
+                </div>
+                <div id="tab-content" class="tab-content-area">
+                    <!-- Contenido dinámico aquí -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Expediente de Maestro -->
+    <div id="teacher-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-teacher-name">Nombre del Maestro</h2>
+                <span class="close-modal-teacher" onclick="closeTeacherModal()"
+                    style="font-size: 28px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-tabs">
+                    <button class="tab-btn-teacher tab-btn active" onclick="switchTeacherTab('digital')"><i
+                            class="fas fa-folder-open"></i> Datos Personales</button>
+                    <button class="tab-btn-teacher tab-btn" onclick="switchTeacherTab('groups')"><i
+                            class="fas fa-users"></i> Grupos Asignados</button>
+                </div>
+                <div id="teacher-tab-content" class="tab-content-area">
+                    <!-- Contenido dinámico aquí -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Chat con Dirección -->
+    <div id="chat-modal" class="modal">
+        <div class="modal-content" style="width: 500px; height: 600px; display: flex; flex-direction: column;">
+            <div class="modal-header">
+                <h2><i class="fas fa-comments"></i> Comunicación Directiva</h2>
+                <span class="close-modal-chat" onclick="closeChatModal()"
+                    style="font-size: 28px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="chat-container">
+                <div class="chat-info-banner">
+                    <i class="fas fa-shield-alt"></i> Moderado por Dirección Académica
+                </div>
+                <div id="chat-messages" class="chat-messages">
+                    <!-- Mensajes aquí -->
+                </div>
+                <div class="chat-input-area">
+                    <div id="ai-suggestion" class="ai-suggestion" style="display: none;">
+                        <small><i class="fas fa-magic"></i> Sugerencia IA (Educada y Precisa):</small>
+                        <p id="suggestion-text"></p>
+                    </div>
+                    <div class="input-wrapper">
+                        <textarea id="chat-input" placeholder="Escribe tu mensaje para Dirección..."></textarea>
+                        <button id="send-btn" onclick="sendMessage()"><i class="fas fa-paper-plane"></i></button>
+                    </div>
+                    <small class="moderation-note">Los mensajes pasan por revisión antes de ser entregados.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Expediente de Tutor -->
+    <div id="tutor-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-tutor-name">Nombre del Tutor</h2>
+                <span class="close-modal-tutor" onclick="closeTutorModal()"
+                    style="font-size: 28px; cursor: pointer;">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-tabs">
+                    <button class="tab-btn-tutor tab-btn active" onclick="switchTutorTab('info')"><i
+                            class="fas fa-id-card"></i> Datos Generales</button>
+                    <button class="tab-btn-tutor tab-btn" onclick="switchTutorTab('children')"><i
+                            class="fas fa-child"></i> Hijos Inscritos</button>
+                </div>
+                <div id="tutor-tab-content" class="tab-content-area">
+                    <!-- Contenido dinámico aquí -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pantalla de Login -->
+    <div id="login-overlay">
+        <div class="login-box">
+            <div class="login-header">
+                <i class="fas fa-graduation-cap"></i>
+                <h2>EduControl Login</h2>
+                <p style="color: #64748b; font-size: 0.9rem; margin-top: 5px;">Sistema de Gestión Escolar</p>
+            </div>
+            <div class="login-form">
+                <form id="login-form-submit" onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label style="display:block; margin-bottom: 5px; font-weight: 600; color: #334155;">Correo
+                            Electrónico</label>
+                        <input type="email" id="login-username" class="form-select" style="width: 100%; padding: 10px;"
+                            required placeholder="usuario@educativoseneca.edu.mx">
+                    </div>
+                    <div class="form-group">
+                        <label
+                            style="display:block; margin-bottom: 5px; font-weight: 600; color: #334155;">Contraseña</label>
+                        <input type="password" id="login-password" class="form-select"
+                            style="width: 100%; padding: 10px;" required placeholder="••••••••">
+                    </div>
+                    <button type="submit" class="login-btn"><i class="fas fa-sign-in-alt"></i> Iniciar Sesión</button>
+                    <div id="login-error-msg" class="login-error">
+                        <i class="fas fa-exclamation-circle"></i> Usuario o contraseña incorrectos.
+                    </div>
+                </form>
+            </div>
+
+            <div
+                style="margin-top:25px; font-size: 0.8rem; color: #94a3b8; text-align: left; background: #f8fafc; padding: 10px; border-radius: 6px;">
+                <strong>Acceso con correo institucional:</strong><br>
+                Ingresa el correo y contraseña asignados por el administrador del sistema.<br><br>
+                <span style="color:#0ea5e9"><i class="fas fa-info-circle"></i></span> Para soporte técnico contacta al
+                administrador.
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
