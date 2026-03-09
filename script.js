@@ -179,10 +179,20 @@ document.addEventListener('DOMContentLoaded', () => {
             const uid = credential.user.uid;
 
             // 2. Obtener perfil y rol desde Firestore
-            const userDoc = await db.collection('users').doc(uid).get();
+            let userDoc;
+            try {
+                userDoc = await db.collection('users').doc(uid).get();
+            } catch (fsError) {
+                errorMsg.innerText = `⚠️ Error Firestore: ${fsError.code} - ${fsError.message}`;
+                errorMsg.style.display = 'block';
+                await auth.signOut();
+                showLoadingState(false);
+                return;
+            }
+
             if (!userDoc.exists) {
                 await auth.signOut();
-                errorMsg.innerText = `⚠️ Sin perfil. UID del usuario: ${uid} — Cópielo y úselo como Document ID en Firestore → users`;
+                errorMsg.innerText = `⚠️ Doc no encontrado. UID Auth: ${uid} | Colección: users | Proyecto: ${firebase.app().options.projectId}`;
                 errorMsg.style.display = 'block';
                 showLoadingState(false);
                 return;
