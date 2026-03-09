@@ -183,20 +183,33 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 userDoc = await db.collection('users').doc(uid).get();
             } catch (fsError) {
-                errorMsg.innerText = `⚠️ Error Firestore: ${fsError.code} - ${fsError.message}`;
+                errorMsg.innerText = `⚠️ Error de conexión: ${fsError.code}`;
                 errorMsg.style.display = 'block';
                 await auth.signOut();
                 showLoadingState(false);
                 return;
             }
 
+            // Si no existe el perfil, auto-crearlo para usuarios conocidos
             if (!userDoc.exists) {
-                await auth.signOut();
-                errorMsg.innerText = `⚠️ Doc no encontrado. UID Auth: ${uid} | Colección: users | Proyecto: ${firebase.app().options.projectId}`;
-                errorMsg.style.display = 'block';
-                showLoadingState(false);
-                return;
+                const perfilesConocidos = {
+                    'jmartinez.seneca@gmail.com': { name: 'Administrador', role: 'ADMIN' },
+                    'jbernard@prodigy.net.mx': { name: 'José Bernardo', role: 'TESORERIA' },
+                    'jbernard63@hotmail.com': { name: 'Profesor(a)', role: 'MAESTRO' }
+                };
+                const perfil = perfilesConocidos[email.toLowerCase()];
+                if (perfil) {
+                    await db.collection('users').doc(uid).set({ email: email, ...perfil });
+                    userDoc = await db.collection('users').doc(uid).get();
+                } else {
+                    await auth.signOut();
+                    errorMsg.innerText = 'Usuario sin perfil configurado. Contacta al administrador.';
+                    errorMsg.style.display = 'block';
+                    showLoadingState(false);
+                    return;
+                }
             }
+
 
             currentUser = { uid, ...userDoc.data() };
 
