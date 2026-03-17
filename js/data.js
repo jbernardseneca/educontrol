@@ -47,7 +47,18 @@
             S.tutorChildren = tChildrenDoc.exists ? (tChildrenDoc.data().data || {}) : {};
             S.chatHistories = chatDoc.exists ? (chatDoc.data().data || {}) : {};
 
+            console.log('Datos cargados:', {
+                students: S.allStudents.length,
+                details: Object.keys(S.studentDetails).length,
+                history: S.financialHistory.length,
+                teachers: S.teachers.length,
+                subjects: S.subjects.length,
+                sampleDetailKeys: Object.keys(S.studentDetails).slice(0, 3),
+                sampleStudentIds: S.allStudents.slice(0, 3).map(s => ({ id: s.id, name: s.name }))
+            });
+
             EC.migrateStudentIds();
+            EC.updateDashboardStats();
             showLoadingState(false);
         } catch (error) {
             console.error('Error cargando datos de Firestore:', error);
