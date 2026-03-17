@@ -236,6 +236,9 @@
                             <option value="Secundaria">Secundaria</option>
                             <option value="Bachillerato">Bachillerato</option>
                         </select>
+                        <button id="btn-export-students" class="btn-secondary"
+                            style="display: none; background:#dcfce7; color:#166534; border-color:#16a34a;"
+                            onclick="exportStudentsToExcel()"><i class="fas fa-file-excel"></i> Exportar</button>
                         <button id="btn-batch-capture" class="btn-secondary" style="display: none;"
                             onclick="showBatchCapture()"><i class="fas fa-layer-group"></i> Captura por Lote</button>
                         <button id="btn-back" class="btn-secondary" style="display: none;"><i
@@ -363,6 +366,10 @@
                         <h2 style="color: var(--primary);"><i class="fas fa-chart-line"></i> Reporte de Saldos y Cajas
                         </h2>
                         <div style="display: flex; gap: 10px;">
+                            <button class="btn-secondary" onclick="exportReportToExcel()"
+                                style="background:#dcfce7; color:#166534; border-color:#16a34a;">
+                                <i class="fas fa-file-excel"></i> Exportar a Excel
+                            </button>
                             <button class="btn-secondary" onclick="showTransferModal()"
                                 style="background:#fef3c7; color:#92400e; border-color:#f59e0b;">
                                 <i class="fas fa-exchange-alt"></i> Transferencia entre Cajas
@@ -576,6 +583,20 @@
                             </button>
                             <input type="file" id="excel-upload" style="display: none;" accept=".xlsx, .xls"
                                 onchange="importFromExcel(event)">
+                            <button class="btn-secondary"
+                                style="background-color: #fef3c7; border-color: #d97706; color: #92400e;"
+                                onclick="document.getElementById('csv-upload').click()">
+                                <i class="fas fa-file-csv"></i> Importar CSV
+                            </button>
+                            <input type="file" id="csv-upload" style="display: none;" accept=".csv, .tsv, .txt"
+                                onchange="importFromCSV(event)">
+                            <button class="btn-secondary"
+                                style="background-color: #ede9fe; border-color: #7c3aed; color: #5b21b6;"
+                                onclick="document.getElementById('sql-upload').click()">
+                                <i class="fas fa-database"></i> Importar SQL
+                            </button>
+                            <input type="file" id="sql-upload" style="display: none;" accept=".sql, .txt"
+                                onchange="importFromSQL(event)">
                             <button class="btn-secondary" onclick="addBatchRow()"><i class="fas fa-plus"></i> Añadir
                                 otra fila</button>
                         </div>
@@ -662,6 +683,20 @@
                             </button>
                             <input type="file" id="service-excel-upload" style="display: none;" accept=".xlsx, .xls"
                                 onchange="importServiceFromExcel(event)">
+                            <button class="btn-secondary"
+                                style="background:#fef3c7; color:#92400e; border-color:#d97706;"
+                                onclick="document.getElementById('service-csv-upload').click()">
+                                <i class="fas fa-file-csv"></i> CSV
+                            </button>
+                            <input type="file" id="service-csv-upload" style="display: none;" accept=".csv, .tsv, .txt"
+                                onchange="importServiceFromCSV(event)">
+                            <button class="btn-secondary"
+                                style="background:#ede9fe; color:#5b21b6; border-color:#7c3aed;"
+                                onclick="document.getElementById('service-sql-upload').click()">
+                                <i class="fas fa-database"></i> SQL
+                            </button>
+                            <input type="file" id="service-sql-upload" style="display: none;" accept=".sql, .txt"
+                                onchange="importServiceFromSQL(event)">
                             <button class="btn-secondary" onclick="addServiceBatchRow()"><i class="fas fa-plus"></i>
                                 Añadir Pago</button>
                         </div>
@@ -719,6 +754,8 @@
                         Estado de Cuenta</button>
                     <button class="tab-btn" onclick="switchTab('digital')"><i class="fas fa-folder-open"></i>
                         Documentación</button>
+                    <button class="tab-btn" onclick="switchTab('edit')"><i class="fas fa-edit"></i>
+                        Editar Datos</button>
                     <button class="tab-btn" onclick="switchTab('chat')"><i class="fas fa-comments"></i> Chat
                         Directivo</button>
                 </div>
@@ -847,7 +884,14 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="firebase-config.js"></script>
-    <script src="script.js"></script>
+    <!-- Módulos EduControl -->
+    <script src="js/utils.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/students.js"></script>
+    <script src="js/payments.js"></script>
+    <script src="js/imports.js"></script>
+    <script src="js/app.js"></script>
 </body>
 
 </html>

@@ -23,6 +23,54 @@ document.addEventListener('DOMContentLoaded', () => {
     let tutorChildren = {};
     let chatHistories = {};
 
+    // Sanitizar HTML para prevenir XSS
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = String(str);
+        return div.innerHTML;
+    }
+
+    // Generar ID único para estudiantes
+    function generateStudentId() {
+        return 'STU-' + Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 5);
+    }
+
+    // Buscar estudiante por nombre (para compatibilidad con datos legacy sin ID)
+    function findStudentByName(name) {
+        return allStudents.find(s => s.name === name);
+    }
+
+    // Obtener la key de studentDetails para un alumno (usa id si existe, sino nombre)
+    function getStudentKey(student) {
+        return student.id || student.name;
+    }
+
+    // Migrar datos legacy: asignar IDs a estudiantes que no tengan y migrar studentDetails
+    function migrateStudentIds() {
+        let migrated = false;
+        allStudents.forEach(s => {
+            if (!s.id) {
+                s.id = generateStudentId();
+                // Migrar studentDetails de nombre a ID
+                if (studentDetails[s.name]) {
+                    studentDetails[s.id] = studentDetails[s.name];
+                    delete studentDetails[s.name];
+                }
+                // Migrar chatHistories de nombre a ID
+                if (chatHistories[s.name]) {
+                    chatHistories[s.id] = chatHistories[s.name];
+                    delete chatHistories[s.name];
+                }
+                migrated = true;
+            }
+        });
+        if (migrated) {
+            saveData();
+            console.log('Migración de IDs completada para', allStudents.length, 'estudiantes.');
+        }
+    }
+
     // --- CARGA DE DATOS DESDE FIRESTORE ---
     async function loadAllData() {
         try {
@@ -54,6 +102,9 @@ document.addEventListener('DOMContentLoaded', () => {
             tutors = tutorsDoc.exists ? (tutorsDoc.data().data || []) : [];
             tutorChildren = tChildrenDoc.exists ? (tChildrenDoc.data().data || {}) : {};
             chatHistories = chatDoc.exists ? (chatDoc.data().data || {}) : {};
+
+            // Migrar estudiantes legacy que no tengan ID
+            migrateStudentIds();
 
             showLoadingState(false);
         } catch (error) {
@@ -294,12 +345,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const activeLink = document.getElementById(activeId);
         if (activeLink) activeLink.classList.add('active');
 
-        // Manejo del botón de captura por lote
+        // Manejo de botones de captura por lote y exportar
         const btnBatch = document.getElementById('btn-batch-capture');
+        const btnExport = document.getElementById('btn-export-students');
         if (activeId === 'nav-students') {
             btnBatch.style.display = 'block';
+            if (btnExport) btnExport.style.display = 'block';
         } else {
             btnBatch.style.display = 'none';
+            if (btnExport) btnExport.style.display = 'none';
         }
     }
 
@@ -327,16 +381,21 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.innerHTML = '';
         subjects.forEach(sub => {
             const row = document.createElement('tr');
-            row.innerHTML = `<td><strong>${sub.name}</strong></td><td>${sub.group}</td><td>${sub.studentsCount}</td><td><button class="btn-action" onclick="viewStudents(${sub.id}, '${sub.name}')">Ver Alumnos</button></td>`;
+            row.innerHTML = `<td><strong>${escapeHtml(sub.name)}</strong></td><td>${escapeHtml(sub.group)}</td><td>${sub.studentsCount}</td><td><button class="btn-action" onclick="viewStudents(${sub.id}, '${sub.name.replace(/'/g, "\\'")}')">Ver Alumnos</button></td>`;
             tableBody.appendChild(row);
         });
     };
 
-    window.showStudents = (filter = 'all') => {
+    const STUDENTS_PER_PAGE = 25;
+    let currentStudentPage = 1;
+    let currentStudentFilter = 'all';
+
+    window.showStudents = (filter = 'all', page = 1) => {
+        currentStudentFilter = filter;
+        currentStudentPage = page;
         updateNav('nav-students');
         dashboardHome.style.display = 'none';
         recentActivity.style.display = 'block';
-        viewTitle.innerText = 'Listado de Alumnos';
         btnBack.style.display = 'none';
         groupFilter.style.display = 'block';
 
@@ -349,52 +408,100 @@ document.addEventListener('DOMContentLoaded', () => {
 
         tableHead.innerHTML = `<th>Nombre</th><th>Nivel</th><th>Grado</th><th>Estado</th><th>Acción</th>`;
         tableBody.innerHTML = '';
-        let list = filter === 'all' ? allStudents : allStudents.filter(s => s.level === filter);
-        list.sort((a, b) => a.level.localeCompare(b.level));
-        list.forEach(s => {
+        let list = filter === 'all' ? [...allStudents] : allStudents.filter(s => s.level === filter);
+        list.sort((a, b) => a.name.localeCompare(b.name));
+
+        const totalItems = list.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / STUDENTS_PER_PAGE));
+        if (page > totalPages) page = totalPages;
+        const startIdx = (page - 1) * STUDENTS_PER_PAGE;
+        const pageItems = list.slice(startIdx, startIdx + STUDENTS_PER_PAGE);
+
+        viewTitle.innerText = `Listado de Alumnos (${totalItems})`;
+
+        pageItems.forEach(s => {
             const row = document.createElement('tr');
             const statusClass = s.status === 'Activo' ? 'status-paid' : 'status-due';
+            const sId = getStudentKey(s);
 
-            // Permisos para botones en la tabla:
             const canDelete = currentUser && currentUser.role === 'ADMIN';
 
             row.innerHTML = `
-                <td><strong>${s.name}</strong></td>
-                <td>${s.level}</td>
-                <td>${s.grade}</td>
-                <td><span class="${statusClass}">${s.status}</span></td>
+                <td><strong>${escapeHtml(s.name)}</strong></td>
+                <td>${escapeHtml(s.level)}</td>
+                <td>${escapeHtml(s.grade)}</td>
+                <td><span class="${statusClass}">${escapeHtml(s.status)}</span></td>
                 <td>
-                    <button class="btn-action" onclick="viewExpediente('${s.name}')">Ver</button>
-                    ${s.status === 'Activo' && canDelete ? `<button class="btn-action" style="color:#ef4444;" onclick="unenrollStudent('${s.name}')" title="Dar de Baja"><i class="fas fa-user-minus"></i> Baja</button>` : ''}
-                    ${canDelete ? `<button class="btn-action" style="color:#dc2626;" onclick="deleteStudent('${s.name}')" title="Eliminar Definitivamente"><i class="fas fa-trash-alt"></i> Eliminar</button>` : ''}
+                    <button class="btn-action" onclick="viewExpedienteById('${sId}')">Ver</button>
+                    ${s.status === 'Activo' && canDelete ? `<button class="btn-action" style="color:#ef4444;" onclick="unenrollStudentById('${sId}')" title="Dar de Baja"><i class="fas fa-user-minus"></i> Baja</button>` : ''}
+                    ${canDelete ? `<button class="btn-action" style="color:#dc2626;" onclick="deleteStudentById('${sId}')" title="Eliminar Definitivamente"><i class="fas fa-trash-alt"></i> Eliminar</button>` : ''}
                 </td>
             `;
             tableBody.appendChild(row);
         });
+
+        // Renderizar paginación
+        if (totalPages > 1) {
+            const paginationRow = document.createElement('tr');
+            let paginationHTML = '<td colspan="5" style="text-align:center; padding:15px;">';
+            paginationHTML += `<span style="color:var(--text-muted); font-size:0.85rem; margin-right:15px;">Página ${page} de ${totalPages}</span>`;
+
+            if (page > 1) {
+                paginationHTML += `<button onclick="showStudents('${filter}', ${page - 1})" class="btn-secondary" style="padding:5px 12px; font-size:0.8rem; margin:0 3px;"><i class="fas fa-chevron-left"></i> Anterior</button>`;
+            }
+
+            // Mostrar botones de página
+            const startPage = Math.max(1, page - 2);
+            const endPage = Math.min(totalPages, page + 2);
+            for (let i = startPage; i <= endPage; i++) {
+                const isActive = i === page;
+                paginationHTML += `<button onclick="showStudents('${filter}', ${i})" style="padding:5px 10px; margin:0 2px; font-size:0.8rem; border-radius:4px; border:1px solid ${isActive ? 'var(--primary)' : 'var(--border)'}; background:${isActive ? 'var(--primary)' : 'white'}; color:${isActive ? 'white' : 'var(--text-main)'}; cursor:pointer; font-weight:${isActive ? '700' : '400'};">${i}</button>`;
+            }
+
+            if (page < totalPages) {
+                paginationHTML += `<button onclick="showStudents('${filter}', ${page + 1})" class="btn-secondary" style="padding:5px 12px; font-size:0.8rem; margin:0 3px;">Siguiente <i class="fas fa-chevron-right"></i></button>`;
+            }
+
+            paginationHTML += '</td>';
+            paginationRow.innerHTML = paginationHTML;
+            tableBody.appendChild(paginationRow);
+        }
     };
 
     window.unenrollStudent = (name) => {
-        if (confirm(`¿Está seguro que desea dar de BAJA al alumno: ${name}?`)) {
-            const student = allStudents.find(s => s.name === name);
-            if (student) {
-                student.status = 'Baja';
-                saveData();
-                showStudents(groupFilter.value); // Recargar vista actual
-                alert(`El alumno ${name} ha sido dado de baja exitosamente.`);
-            }
+        const student = findStudentByName(name);
+        if (student) unenrollStudentById(getStudentKey(student));
+    };
+
+    window.unenrollStudentById = (id) => {
+        const student = allStudents.find(s => getStudentKey(s) === id);
+        if (!student) return;
+        if (confirm(`¿Está seguro que desea dar de BAJA al alumno: ${student.name}?`)) {
+            student.status = 'Baja';
+            saveData();
+            showStudents(groupFilter.value);
+            alert(`El alumno ${student.name} ha sido dado de baja exitosamente.`);
         }
     };
 
     window.deleteStudent = (name) => {
-        if (confirm(`¡ADVERTENCIA! ¿Está seguro que desea ELIMINAR PERMANENTEMENTE a: ${name}?\nEsta acción borrará todo su historial y no se puede deshacer.`)) {
-            if (confirm(`Confirme nuevamente: ¿Realmente desea borrar a ${name}?`)) {
-                const index = allStudents.findIndex(s => s.name === name);
+        const student = findStudentByName(name);
+        if (student) deleteStudentById(getStudentKey(student));
+    };
+
+    window.deleteStudentById = (id) => {
+        const student = allStudents.find(s => getStudentKey(s) === id);
+        if (!student) return;
+        if (confirm(`¡ADVERTENCIA! ¿Está seguro que desea ELIMINAR PERMANENTEMENTE a: ${student.name}?\nEsta acción borrará todo su historial y no se puede deshacer.`)) {
+            if (confirm(`Confirme nuevamente: ¿Realmente desea borrar a ${student.name}?`)) {
+                const index = allStudents.indexOf(student);
                 if (index !== -1) {
                     allStudents.splice(index, 1);
-                    delete studentDetails[name];
+                    delete studentDetails[id];
+                    delete chatHistories[id];
                     saveData();
                     showStudents(groupFilter.value);
-                    alert(`El registro de ${name} ha sido eliminado totalmente.`);
+                    alert(`El registro de ${student.name} ha sido eliminado totalmente.`);
                 }
             }
         }
@@ -417,7 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.innerHTML = '';
         teachers.forEach(t => {
             const row = document.createElement('tr');
-            row.innerHTML = `<td><strong>${t.name}</strong></td><td>${t.level}</td><td>${t.profession}</td><td><button class="btn-action" onclick="viewTeacherExpediente('${t.name}')">Ver Expediente</button></td>`;
+            row.innerHTML = `<td><strong>${escapeHtml(t.name)}</strong></td><td>${escapeHtml(t.level)}</td><td>${escapeHtml(t.profession)}</td><td><button class="btn-action" onclick="viewTeacherExpediente('${t.name.replace(/'/g, "\\'")}')">Ver Expediente</button></td>`;
             tableBody.appendChild(row);
         });
     };
@@ -439,7 +546,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tableBody.innerHTML = '';
         tutors.forEach(t => {
             const row = document.createElement('tr');
-            row.innerHTML = `<td><strong>${t.name}</strong></td><td>${t.phone}</td><td>${t.email}</td><td><button class="btn-action" onclick="viewTutorExpediente('${t.name}')">Ver Datos</button></td>`;
+            row.innerHTML = `<td><strong>${escapeHtml(t.name)}</strong></td><td>${escapeHtml(t.phone)}</td><td>${escapeHtml(t.email)}</td><td><button class="btn-action" onclick="viewTutorExpediente('${t.name.replace(/'/g, "\\'")}')">Ver Datos</button></td>`;
             tableBody.appendChild(row);
         });
     }
@@ -463,7 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let tName = "Por asignar";
             for (let t in teacherGroups) if (teacherGroups[t].some(g => g.id === sub.id)) tName = t;
             const row = document.createElement('tr');
-            row.innerHTML = `<td><strong>${sub.name}</strong></td><td>${sub.group}</td><td>${tName}</td><td><button class="btn-action" onclick="viewGroupGrades(${sub.id}, '${sub.name}')">Ver Alumnos</button></td>`;
+            row.innerHTML = `<td><strong>${escapeHtml(sub.name)}</strong></td><td>${escapeHtml(sub.group)}</td><td>${escapeHtml(tName)}</td><td><button class="btn-action" onclick="viewGroupGrades(${sub.id}, '${sub.name.replace(/'/g, "\\'")}')">Ver Alumnos</button></td>`;
             tableBody.appendChild(row);
         });
     }
@@ -531,14 +638,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const folio = `${method === 'Efectivo' ? 'EF' : (method === 'Tarjeta' ? 'TJ' : 'TR')}-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
         // VINCULACIÓN CON EXPEDIENTE
-        if (!studentDetails[name]) {
-            studentDetails[name] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
+        const payStudent = findStudentByName(name);
+        const payKey = payStudent ? getStudentKey(payStudent) : name;
+        if (!studentDetails[payKey]) {
+            studentDetails[payKey] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
         }
-        if (!studentDetails[name].payments) {
-            studentDetails[name].payments = [];
+        if (!studentDetails[payKey].payments) {
+            studentDetails[payKey].payments = [];
         }
 
-        studentDetails[name].payments.push({
+        studentDetails[payKey].payments.push({
             type: 'ABONO',
             date: new Date().toLocaleDateString(),
             concept: conceptLabel,
@@ -760,9 +869,17 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    window.cancelTransaction = (index) => {
+    window.cancelTransaction = (indexOrFolio) => {
+        // Soportar tanto índice numérico como folio string
+        let index;
+        if (typeof indexOrFolio === 'number') {
+            index = indexOrFolio;
+        } else {
+            // Buscar por folio
+            index = financialHistory.findIndex(t => t.folio === indexOrFolio);
+        }
         const t = financialHistory[index];
-        if (!t) return;
+        if (!t) return alert("No se encontró la transacción.");
         if (t.isCancelled) return alert("Esta operación ya fue cancelada.");
 
         if (currentUser && currentUser.role !== "ADMIN") {
@@ -778,12 +895,12 @@ document.addEventListener('DOMContentLoaded', () => {
             boxBalances[t.box] -= t.amount;
 
             // 3. Buscar y cancelar en el expediente individual de CADA alumno
-            for (let studentName in studentDetails) {
-                if (studentDetails[studentName].payments) {
-                    const payIdx = studentDetails[studentName].payments.findIndex(p => p.folio === t.folio);
+            for (let key in studentDetails) {
+                if (studentDetails[key].payments) {
+                    const payIdx = studentDetails[key].payments.findIndex(p => p.folio === t.folio);
                     if (payIdx !== -1) {
-                        studentDetails[studentName].payments[payIdx].status = 'CANCELADO';
-                        studentDetails[studentName].payments[payIdx].cancelDate = new Date().toLocaleString();
+                        studentDetails[key].payments[payIdx].status = 'CANCELADO';
+                        studentDetails[key].payments[payIdx].cancelDate = new Date().toLocaleString();
                     }
                 }
             }
@@ -835,6 +952,90 @@ document.addEventListener('DOMContentLoaded', () => {
         closeTransferModal();
         updateBoxBalances();
         updateBoxReport();
+    };
+
+    // --- EXPORTAR REPORTE A EXCEL ---
+    window.exportReportToExcel = () => {
+        const table = document.getElementById('box-transactions-table');
+        if (!table) { alert('No hay datos para exportar.'); return; }
+
+        // Obtener filtros activos para el nombre del archivo
+        const boxFilter = document.getElementById('report-box-filter').value;
+        const dateStart = document.getElementById('report-date-start').value;
+        const dateEnd = document.getElementById('report-date-end').value;
+
+        // Construir datos desde la tabla visible
+        const rows = table.querySelectorAll('tbody tr');
+        const exportData = [];
+        rows.forEach(row => {
+            const cells = row.querySelectorAll('td');
+            if (cells.length >= 6) {
+                exportData.push({
+                    'Fecha': cells[0].textContent.trim(),
+                    'Caja': cells[1].textContent.trim(),
+                    'Concepto': cells[2].textContent.replace('[CANCELADO]', '').trim(),
+                    'Entrada': cells[3].textContent.trim(),
+                    'Salida': cells[4].textContent.trim(),
+                    'Saldo': cells[5].textContent.trim()
+                });
+            }
+        });
+
+        if (exportData.length === 0) { alert('No hay movimientos para exportar con los filtros actuales.'); return; }
+
+        // Agregar resumen de saldos de cajas
+        const summaryData = [];
+        for (let box in boxBalances) {
+            summaryData.push({ 'Caja': box, 'Saldo Actual': '$' + boxBalances[box].toLocaleString() });
+        }
+
+        const wb = XLSX.utils.book_new();
+
+        // Hoja 1: Movimientos
+        const ws1 = XLSX.utils.json_to_sheet(exportData);
+        XLSX.utils.book_append_sheet(wb, ws1, 'Movimientos');
+
+        // Hoja 2: Resumen de Cajas
+        const ws2 = XLSX.utils.json_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Saldos de Cajas');
+
+        // Nombre del archivo con filtros y fecha
+        let fileName = 'Reporte_Financiero';
+        if (boxFilter !== 'Todas') fileName += '_' + boxFilter.replace(/\s/g, '');
+        if (dateStart) fileName += '_desde_' + dateStart;
+        if (dateEnd) fileName += '_hasta_' + dateEnd;
+        fileName += '_' + new Date().toISOString().split('T')[0] + '.xlsx';
+
+        XLSX.writeFile(wb, fileName);
+        alert('Reporte exportado exitosamente.');
+    };
+
+    // --- EXPORTAR LISTA DE ALUMNOS A EXCEL ---
+    window.exportStudentsToExcel = () => {
+        if (allStudents.length === 0) { alert('No hay alumnos para exportar.'); return; }
+
+        const data = allStudents.map(s => {
+            const key = getStudentKey(s);
+            const d = studentDetails[key] || {};
+            const m = d.mother || {};
+            const f = d.father || {};
+            return {
+                'Nombre': s.name,
+                'Nivel': s.level,
+                'Grado': s.grade,
+                'Estado': s.status,
+                'Teléfono Tutor': s.tutorPhone || '',
+                'Madre': m.name || '',
+                'Tel. Madre': m.phone || '',
+                'Padre': f.name || '',
+                'Tel. Padre': f.phone || ''
+            };
+        });
+
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Alumnos');
+        XLSX.writeFile(wb, 'Lista_Alumnos_' + new Date().toISOString().split('T')[0] + '.xlsx');
     };
 
     // --- CAPTURA POR LOTE ---
@@ -1007,6 +1208,236 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsArrayBuffer(file);
     };
 
+    // --- IMPORTACIÓN CSV (Alumnos) ---
+    window.importFromCSV = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result;
+                const separator = text.includes('\t') ? '\t' : ',';
+                const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+                if (lines.length < 2) { alert('El archivo CSV está vacío o no tiene datos.'); return; }
+
+                const headers = lines[0].split(separator).map(h => h.replace(/^"(.*)"$/, '$1').trim().toLowerCase());
+                const dataRows = lines.slice(1);
+
+                if (confirm(`Se detectaron ${dataRows.length} filas. ¿Cargarlas en la tabla?`)) {
+                    const batchBody = document.getElementById('batch-table-body');
+                    batchBody.innerHTML = '';
+
+                    dataRows.forEach(line => {
+                        const cols = line.split(separator).map(c => c.replace(/^"(.*)"$/, '$1').trim());
+                        const getCol = (...keys) => {
+                            const idx = headers.findIndex(h => keys.some(k => h.includes(k)));
+                            return idx >= 0 ? cols[idx] : '';
+                        };
+                        const name = getCol('nombre', 'name', 'alumno');
+                        if (name) {
+                            window.addBatchRow({
+                                grade: getCol('grado', 'grade', 'grupo'),
+                                english: getCol('inglés', 'ingles', 'english', 'nivel'),
+                                phone: getCol('teléfono', 'telefono', 'phone', 'tel'),
+                                name: name,
+                                name2: getCol('2do nombre', 'segundo nombre', 'middle'),
+                                lastName1: getCol('1er apellido', 'apellido1', 'primer apellido', 'apellido paterno'),
+                                lastName2: getCol('2o apellido', 'apellido2', 'segundo apellido', 'apellido materno'),
+                                pay_ins: getCol('inscripción', 'inscripcion', 'pago inscripción'),
+                                pay_support: getCol('apoyo', 'gastos apoyo', 'gastos'),
+                                pay_insurance: getCol('seguro', 'seguro escolar')
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error procesando CSV:', error);
+                alert('Error al leer el archivo CSV.');
+            }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    // --- IMPORTACIÓN SQL (Alumnos) ---
+    window.importFromSQL = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result;
+                // Buscar INSERT INTO statements
+                const insertRegex = /INSERT\s+INTO\s+\S+\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/gi;
+                const rows = [];
+                let match;
+
+                while ((match = insertRegex.exec(text)) !== null) {
+                    const columns = match[1].split(',').map(c => c.replace(/[`"'\[\]]/g, '').trim().toLowerCase());
+                    const values = match[2].split(',').map(v => v.replace(/^['"]|['"]$/g, '').trim());
+                    const row = {};
+                    columns.forEach((col, i) => { row[col] = values[i] || ''; });
+                    rows.push(row);
+                }
+
+                // También soportar INSERT con VALUES múltiples: INSERT INTO t (cols) VALUES (v1), (v2), ...
+                const multiRegex = /INSERT\s+INTO\s+\S+\s*\(([^)]+)\)\s*VALUES\s*((?:\([^)]+\)\s*,?\s*)+)/gi;
+                while ((match = multiRegex.exec(text)) !== null) {
+                    const columns = match[1].split(',').map(c => c.replace(/[`"'\[\]]/g, '').trim().toLowerCase());
+                    const valuesBlock = match[2];
+                    const valueGroups = valuesBlock.match(/\(([^)]+)\)/g);
+                    if (valueGroups) {
+                        valueGroups.forEach(group => {
+                            const values = group.replace(/^\(|\)$/g, '').split(',').map(v => v.replace(/^['"]|['"]$/g, '').trim());
+                            const row = {};
+                            columns.forEach((col, i) => { row[col] = values[i] || ''; });
+                            // Evitar duplicados si ya fueron capturados por el regex anterior
+                            const isDup = rows.some(r => JSON.stringify(r) === JSON.stringify(row));
+                            if (!isDup) rows.push(row);
+                        });
+                    }
+                }
+
+                if (rows.length === 0) {
+                    alert('No se encontraron sentencias INSERT válidas en el archivo SQL.\n\nFormato esperado:\nINSERT INTO alumnos (nombre, grado, telefono) VALUES (\'Juan\', \'4A\', \'555...\');');
+                    return;
+                }
+
+                if (confirm(`Se detectaron ${rows.length} registros SQL. ¿Cargarlos en la tabla?`)) {
+                    const batchBody = document.getElementById('batch-table-body');
+                    batchBody.innerHTML = '';
+
+                    rows.forEach(row => {
+                        const getVal = (...keys) => {
+                            const key = Object.keys(row).find(k => keys.some(search => k.includes(search)));
+                            return key ? row[key] : '';
+                        };
+                        const name = getVal('nombre', 'name', 'alumno', 'primer_nombre');
+                        if (name) {
+                            window.addBatchRow({
+                                grade: getVal('grado', 'grade', 'grupo'),
+                                english: getVal('ingles', 'english', 'nivel_ingles'),
+                                phone: getVal('telefono', 'phone', 'tel', 'celular'),
+                                name: name,
+                                name2: getVal('segundo_nombre', 'nombre2', 'middle'),
+                                lastName1: getVal('apellido_paterno', 'apellido1', 'primer_apellido'),
+                                lastName2: getVal('apellido_materno', 'apellido2', 'segundo_apellido'),
+                                pay_ins: getVal('inscripcion', 'pago_inscripcion'),
+                                pay_support: getVal('apoyo', 'gastos_apoyo'),
+                                pay_insurance: getVal('seguro', 'seguro_escolar')
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error procesando SQL:', error);
+                alert('Error al leer el archivo SQL.');
+            }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    // --- IMPORTACIÓN CSV/SQL (Servicios/Pagos) ---
+    window.importServiceFromCSV = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result;
+                const separator = text.includes('\t') ? '\t' : ',';
+                const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                if (lines.length < 2) { alert('El archivo CSV está vacío.'); return; }
+
+                const headers = lines[0].split(separator).map(h => h.replace(/^"(.*)"$/, '$1').trim().toLowerCase());
+                const dataRows = lines.slice(1);
+
+                if (confirm(`Se detectaron ${dataRows.length} pagos. ¿Cargarlos?`)) {
+                    const body = document.getElementById('services-batch-body');
+                    body.innerHTML = '';
+                    dataRows.forEach(line => {
+                        const cols = line.split(separator).map(c => c.replace(/^"(.*)"$/, '$1').trim());
+                        const getCol = (...keys) => {
+                            const idx = headers.findIndex(h => keys.some(k => h.includes(k)));
+                            return idx >= 0 ? cols[idx] : '';
+                        };
+                        const student = getCol('alumno', 'nombre', 'student');
+                        if (student) {
+                            window.addServiceBatchRow({
+                                student,
+                                quote: getCol('cotizado', 'normal', 'inscripcion normal') || '',
+                                discount: getCol('descuento', 'promocion') || 0,
+                                amount: getCol('pagado', 'monto', 'amount') || '',
+                                date: getCol('fecha', 'date') || '',
+                                folio: getCol('folio') || '',
+                                method: getCol('forma', 'metodo', 'method') || 'Efectivo',
+                                receiver: getCol('recibe', 'caja', 'receiver') || 'Recepción'
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error CSV servicios:', error);
+                alert('Error al leer el archivo CSV.');
+            }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
+    window.importServiceFromSQL = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const text = e.target.result;
+                const insertRegex = /INSERT\s+INTO\s+\S+\s*\(([^)]+)\)\s*VALUES\s*\(([^)]+)\)/gi;
+                const rows = [];
+                let match;
+                while ((match = insertRegex.exec(text)) !== null) {
+                    const columns = match[1].split(',').map(c => c.replace(/[`"'\[\]]/g, '').trim().toLowerCase());
+                    const values = match[2].split(',').map(v => v.replace(/^['"]|['"]$/g, '').trim());
+                    const row = {};
+                    columns.forEach((col, i) => { row[col] = values[i] || ''; });
+                    rows.push(row);
+                }
+
+                if (rows.length === 0) { alert('No se encontraron INSERT válidos en el archivo SQL.'); return; }
+
+                if (confirm(`Se detectaron ${rows.length} registros SQL. ¿Cargarlos?`)) {
+                    const body = document.getElementById('services-batch-body');
+                    body.innerHTML = '';
+                    rows.forEach(row => {
+                        const getVal = (...keys) => {
+                            const key = Object.keys(row).find(k => keys.some(s => k.includes(s)));
+                            return key ? row[key] : '';
+                        };
+                        const student = getVal('alumno', 'nombre', 'student');
+                        if (student) {
+                            window.addServiceBatchRow({
+                                student,
+                                quote: getVal('cotizado', 'normal', 'inscripcion') || '',
+                                discount: getVal('descuento', 'promocion') || 0,
+                                amount: getVal('pagado', 'monto', 'amount') || '',
+                                date: getVal('fecha', 'date') || '',
+                                folio: getVal('folio') || '',
+                                method: getVal('forma', 'metodo') || 'Efectivo',
+                                receiver: getVal('recibe', 'caja') || 'Recepción'
+                            });
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Error SQL servicios:', error);
+                alert('Error al leer el archivo SQL.');
+            }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    };
+
     window.removeBatchRow = (btn) => {
         const row = btn.closest('tr');
         row.remove();
@@ -1024,6 +1455,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.saveBatch = () => {
         const rows = document.querySelectorAll('#batch-table-body tr');
         let newCount = 0;
+        let updatedCount = 0;
+        let skippedNames = [];
 
         rows.forEach(row => {
             const name = row.querySelector('.batch-name').value.trim();
@@ -1039,32 +1472,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (name !== '') {
                 const fullName = `${name} ${name2} ${ln1} ${ln2}`.replace(/\s+/g, ' ').trim();
-                allStudents.push({
-                    name: fullName,
-                    level: 'Por Definir', // Opcional: podrías inferirlo del grado
-                    grade: grade,
-                    english: english,
-                    tutorPhone: phone,
-                    status: 'Activo'
-                });
 
-                // Registrar pagos iniciales en el expediente
-                studentDetails[fullName] = {
-                    initialPayments: {
-                        inscripcion: payIns || 0,
-                        gastosApoyo: paySupport || 0,
-                        seguro: payInsurance || 0
-                    },
-                    mother: { name: 'S/D', phone: phone },
-                    father: { name: 'S/D', phone: phone }
-                };
-                newCount++;
+                // Verificar si el alumno ya existe (por nombre normalizado)
+                const existing = allStudents.find(s => s.name.toLowerCase().trim() === fullName.toLowerCase().trim());
+
+                if (existing) {
+                    // Actualizar datos del alumno existente sin duplicar
+                    if (grade) existing.grade = grade;
+                    if (english) existing.english = english;
+                    if (phone) existing.tutorPhone = phone;
+
+                    // NO sobreescribir studentDetails existente, solo agregar lo que falte
+                    const existKey = getStudentKey(existing);
+                    if (!studentDetails[existKey]) {
+                        studentDetails[existKey] = { mother: { name: 'S/D', phone: phone }, father: { name: 'S/D', phone: phone }, payments: [] };
+                    }
+                    // Actualizar teléfono del tutor si se proporcionó
+                    if (phone && studentDetails[existKey].mother) {
+                        studentDetails[existKey].mother.phone = phone;
+                    }
+                    updatedCount++;
+                } else {
+                    // Crear nuevo alumno con ID único
+                    const newId = generateStudentId();
+                    allStudents.push({
+                        id: newId,
+                        name: fullName,
+                        level: 'Por Definir',
+                        grade: grade,
+                        english: english,
+                        tutorPhone: phone,
+                        status: 'Activo'
+                    });
+
+                    // Registrar datos iniciales en el expediente usando ID
+                    studentDetails[newId] = {
+                        initialPayments: {
+                            inscripcion: payIns || 0,
+                            gastosApoyo: paySupport || 0,
+                            seguro: payInsurance || 0
+                        },
+                        mother: { name: 'S/D', phone: phone },
+                        father: { name: 'S/D', phone: phone },
+                        payments: []
+                    };
+                    newCount++;
+                }
             }
         });
 
-        if (newCount > 0) {
+        if (newCount > 0 || updatedCount > 0) {
             saveData();
-            alert(`¡Éxito! Se han registrado ${newCount} alumnos correctamente.`);
+            let msg = '';
+            if (newCount > 0) msg += `${newCount} alumnos nuevos registrados. `;
+            if (updatedCount > 0) msg += `${updatedCount} alumnos existentes actualizados.`;
+            alert(`¡Éxito! ${msg}`);
             showStudents();
         } else {
             alert('No se ingresó ningún nombre de alumno.');
@@ -1317,11 +1779,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const folio = folioManual || `${method.substring(0, 2).toUpperCase()}-${y}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-                if (!studentDetails[student]) studentDetails[student] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
-                if (!studentDetails[student].payments) studentDetails[student].payments = [];
+                // Vincular por ID si el alumno existe en el sistema
+                const svcStudent = findStudentByName(student);
+                const svcKey = svcStudent ? getStudentKey(svcStudent) : student;
+
+                if (!studentDetails[svcKey]) studentDetails[svcKey] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
+                if (!studentDetails[svcKey].payments) studentDetails[svcKey].payments = [];
 
                 if (quote > 0) {
-                    studentDetails[student].payments.push({
+                    studentDetails[svcKey].payments.push({
                         type: 'CARGO',
                         date: formattedDate,
                         concept: finalConcept,
@@ -1333,7 +1799,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (paid > 0 || quote === 0) {
-                    studentDetails[student].payments.push({
+                    studentDetails[svcKey].payments.push({
                         type: 'ABONO',
                         date: formattedDate,
                         concept: quote > 0 ? 'Pago ' + finalConcept : finalConcept,
@@ -1373,140 +1839,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.showExpenses = () => {
-        dashboardHome.style.display = 'none';
-        viewTitle.innerText = 'Gestión de Gastos';
-        btnBack.style.display = 'block';
-        btnBack.onclick = showPaymentsModule;
-        tableHead.innerHTML = `
-            <th>Fecha</th>
-            <th>Concepto</th>
-            <th>Monto</th>
-            <th>Método</th>
-            <th>Caja Origen</th>
-            <th>Acción</th>
-        `;
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="6">
-                    <div style="padding: 15px; background: #f8fafc; border-radius: 8px; margin-bottom: 15px;">
-                        <h5 style="margin-top:0; color:var(--primary);">Registrar Nuevo Gasto</h5>
-                        <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 1fr 1fr; gap:10px;">
-                            <input type="text" id="expense-concept" placeholder="Concepto del Gasto" class="form-select">
-                            <input type="number" id="expense-amount" placeholder="Monto ($)" class="form-select">
-                            <input type="date" id="expense-date" class="form-select" value="${new Date().toISOString().split('T')[0]}">
-                            <select id="expense-method" class="form-select">
-                                <option value="Efectivo">Efectivo</option>
-                                <option value="Tarjeta">Tarjeta</option>
-                                <option value="Transferencia">Transferencia</option>
-                            </select>
-                            <select id="expense-receiver" class="form-select">
-                                <option value="Recepción">Recepción</option>
-                                <option value="José Bernardo">José Bernardo</option>
-                                <option value="Georgina A">Georgina A</option>
-                                <option value="Banorte">Banorte</option>
-                            </select>
-                        </div>
-                        <div style="margin-top:10px; text-align:right;">
-                            <button onclick="processExpense()" class="btn-primary" style="padding:6px 12px; font-size:0.8rem; background:#ef4444; color:white; border:none; border-radius:4px; cursor:pointer;">Registrar Gasto</button>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
-        renderExpensesTable();
-    };
-
-    window.processExpense = () => {
-        const concept = document.getElementById('expense-concept').value.trim();
-        const amount = parseFloat(document.getElementById('expense-amount').value);
-        const date = document.getElementById('expense-date').value;
-        const method = document.getElementById('expense-method').value;
-        const receiver = document.getElementById('expense-receiver').value;
-
-        if (!concept || !amount || amount <= 0 || !date) {
-            alert("Por favor, complete todos los campos y asegúrese de que el monto sea válido.");
-            return;
-        }
-
-        const [y, m, d] = date.split('-');
-        const formattedDate = `${d}/${m}/${y}`;
-
-        // Generate a unique folio for the expense
-        const folio = `GTO-${method.substring(0, 2).toUpperCase()}-${y}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-        financialHistory.push({
-            date: formattedDate + ' 12:00:00',
-            box: receiver,
-            concept: concept,
-            type: 'EXIT',
-            amount: amount,
-            folio: folio,
-            method: method,
-            isCancelled: false
-        });
-
-        // Deduct from the box balance
-        boxBalances[receiver] -= amount;
-
-        saveData();
-        renderExpensesTable();
-        alert(`Gasto de $${amount} registrado exitosamente.`);
-
-        // Clear form
-        document.getElementById('expense-concept').value = '';
-        document.getElementById('expense-amount').value = '';
-        document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
-    };
-
-    window.renderExpensesTable = () => {
-        const expenses = financialHistory.filter(item => item.type === 'EXIT' && !item.isCancelled);
-        let rowsHTML = '';
-
-        expenses.sort((a, b) => new Date(b.date.split(' ')[0].split('/').reverse().join('-')) - new Date(a.date.split(' ')[0].split('/').reverse().join('-')));
-
-        expenses.forEach((expense, index) => {
-            rowsHTML += `
-                <tr>
-                    <td>${expense.date.split(' ')[0]}</td>
-                    <td>${expense.concept}</td>
-                    <td style="color:#dc2626;">-$${expense.amount.toLocaleString()}</td>
-                    <td>${expense.method}</td>
-                    <td>${expense.box}</td>
-                    <td>
-                        <button onclick="cancelTransaction('${expense.folio}')" title="Anular Gasto" style="background:none; border:none; color:#ef4444; cursor:pointer;"><i class="fas fa-times-circle"></i></button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        // Find the tableBody and insert rows after the expense form row
-        const tableBodyElement = document.getElementById('table-body');
-        if (tableBodyElement) {
-            // Assuming the first row is the form, append subsequent rows
-            const formRow = tableBodyElement.querySelector('tr:first-child');
-            if (formRow) {
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = `<table><tbody>${rowsHTML}</tbody></table>`;
-                const newRows = Array.from(tempDiv.querySelector('tbody').children);
-
-                // Remove existing expense rows (all except the first form row)
-                while (tableBodyElement.children.length > 1) {
-                    tableBodyElement.removeChild(tableBodyElement.lastChild);
-                }
-
-                newRows.forEach(row => tableBodyElement.appendChild(row));
-            } else {
-                tableBodyElement.innerHTML = rowsHTML; // Fallback if form row not found
-            }
-        }
-    };
-
     // --- FUNCIONES DE EXPEDIENTE ---
 
     let currentStudent = null;
-    window.viewExpediente = (name) => {
-        currentStudent = allStudents.find(s => s.name === name);
+
+    window.viewExpedienteById = (id) => {
+        currentStudent = allStudents.find(s => getStudentKey(s) === id);
         if (!currentStudent) return;
         if (tutorModal) tutorModal.style.display = 'none';
         if (teacherModal) teacherModal.style.display = 'none';
@@ -1515,6 +1853,13 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('modal-student-grade').innerText = currentStudent.grade;
         studentModal.style.display = 'block';
         switchTab('grades');
+    };
+
+    // Compatibilidad: viewExpediente por nombre (usado por tutores, padres, etc.)
+    window.viewExpediente = (name) => {
+        const student = findStudentByName(name);
+        if (!student) return;
+        viewExpedienteById(getStudentKey(student));
     };
 
     window.viewStudents = (id, name) => {
@@ -1585,9 +1930,66 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const content = document.getElementById('tab-content');
         if (tab === 'grades') {
-            content.innerHTML = `<div class="data-item"><span>Promedio General</span> <strong>9.2</strong></div>`;
+            // Buscar calificaciones reales del alumno en todas las materias
+            let gradesHTML = '';
+            let totalGrades = 0;
+            let gradeCount = 0;
+
+            for (let subjectId in periodGrades) {
+                const gradesList = periodGrades[subjectId] || [];
+                const studentGrade = gradesList.find(g => g.name === currentStudent.name);
+                if (studentGrade) {
+                    const sub = subjects.find(s => s.id === parseInt(subjectId)) || { name: 'Materia ' + subjectId };
+                    const p1 = studentGrade.p1 || 0;
+                    const p2 = studentGrade.p2 || 0;
+                    const p3 = studentGrade.p3 || 0;
+                    const periods = [p1, p2, p3].filter(p => p > 0);
+                    const avg = periods.length > 0 ? (periods.reduce((a, b) => a + b, 0) / periods.length) : 0;
+                    if (avg > 0) {
+                        totalGrades += avg;
+                        gradeCount++;
+                    }
+                    gradesHTML += `
+                        <tr>
+                            <td style="padding:8px; border-bottom:1px solid #e2e8f0;"><strong>${escapeHtml(sub.name)}</strong></td>
+                            <td style="padding:8px; border-bottom:1px solid #e2e8f0; text-align:center;">${p1 || '-'}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e2e8f0; text-align:center;">${p2 || '-'}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e2e8f0; text-align:center;">${p3 || '-'}</td>
+                            <td style="padding:8px; border-bottom:1px solid #e2e8f0; text-align:center; font-weight:bold; color:${avg >= 6 ? '#059669' : '#dc2626'}">${avg > 0 ? avg.toFixed(1) : '-'}</td>
+                        </tr>
+                    `;
+                }
+            }
+
+            const promedioGeneral = gradeCount > 0 ? (totalGrades / gradeCount).toFixed(1) : 'N/A';
+
+            if (gradesHTML) {
+                content.innerHTML = `
+                    <div class="expediente-section">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                            <h4>Calificaciones por Materia</h4>
+                            <span style="background:${promedioGeneral !== 'N/A' && parseFloat(promedioGeneral) >= 6 ? '#dcfce7' : '#fee2e2'}; color:${promedioGeneral !== 'N/A' && parseFloat(promedioGeneral) >= 6 ? '#166534' : '#991b1b'}; padding:6px 14px; border-radius:8px; font-weight:700;">Promedio General: ${promedioGeneral}</span>
+                        </div>
+                        <table style="width:100%; font-size:0.85rem; border-collapse:collapse;">
+                            <thead>
+                                <tr style="border-bottom:2px solid var(--primary-light);">
+                                    <th style="padding:8px; text-align:left;">Materia</th>
+                                    <th style="padding:8px; text-align:center;">P1</th>
+                                    <th style="padding:8px; text-align:center;">P2</th>
+                                    <th style="padding:8px; text-align:center;">P3</th>
+                                    <th style="padding:8px; text-align:center;">Promedio</th>
+                                </tr>
+                            </thead>
+                            <tbody>${gradesHTML}</tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `<div style="text-align:center; padding:30px; color:#64748b;"><i class="fas fa-book-open" style="font-size:2rem; margin-bottom:10px; display:block; opacity:0.5;"></i>No hay calificaciones registradas para este alumno.</div>`;
+            }
         } else if (tab === 'payments') {
-            const history = studentDetails[currentStudent.name]?.payments || [];
+            const studentKey = getStudentKey(currentStudent);
+            const history = studentDetails[studentKey]?.payments || [];
             let balance = 0;
 
             let rowsHTML = history.map((p, index) => {
@@ -1726,7 +2128,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
         } else if (tab === 'digital') {
-            const d = studentDetails[currentStudent.name] || {};
+            const d = studentDetails[getStudentKey(currentStudent)] || {};
             const m = d.mother || { name: 'S/D', phone: 'S/D', address: 'S/D', email: 'S/D', profession: 'S/D', isTutor: false };
             const f = d.father || { name: 'S/D', phone: 'S/D', address: 'S/D', email: 'S/D', profession: 'S/D', isTutor: false };
 
@@ -1758,6 +2160,73 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="data-item"><span>Certificado de Nivel Anterior</span> <strong>Entregado</strong></div>
                 </div>
             `;
+        } else if (tab === 'edit') {
+            // Solo ADMIN y TESORERIA pueden editar
+            if (currentUser && (currentUser.role === 'MAESTRO' || currentUser.role === 'PADRE')) {
+                alert("Acceso Restringido: Tu rol no tiene permisos para editar datos.");
+                return;
+            }
+            const studentKey = getStudentKey(currentStudent);
+            const d = studentDetails[studentKey] || {};
+            const m = d.mother || { name: '', phone: '', address: '', email: '', profession: '', isTutor: false };
+            const f = d.father || { name: '', phone: '', address: '', email: '', profession: '', isTutor: false };
+
+            content.innerHTML = `
+                <div class="expediente-section">
+                    <h4><i class="fas fa-user-graduate"></i> Datos del Alumno</h4>
+                    <div class="info-grid" style="margin-bottom:20px;">
+                        <div class="info-group">
+                            <label>Nombre Completo:</label>
+                            <input type="text" id="edit-student-name" class="form-select" style="width:100%;" value="${escapeHtml(currentStudent.name)}">
+                        </div>
+                        <div class="info-group">
+                            <label>Nivel:</label>
+                            <select id="edit-student-level" class="form-select" style="width:100%;">
+                                <option value="Por Definir" ${currentStudent.level === 'Por Definir' ? 'selected' : ''}>Por Definir</option>
+                                <option value="Preescolar" ${currentStudent.level === 'Preescolar' ? 'selected' : ''}>Preescolar</option>
+                                <option value="Primaria" ${currentStudent.level === 'Primaria' ? 'selected' : ''}>Primaria</option>
+                                <option value="Secundaria" ${currentStudent.level === 'Secundaria' ? 'selected' : ''}>Secundaria</option>
+                                <option value="Bachillerato" ${currentStudent.level === 'Bachillerato' ? 'selected' : ''}>Bachillerato</option>
+                            </select>
+                        </div>
+                        <div class="info-group">
+                            <label>Grado/Grupo:</label>
+                            <input type="text" id="edit-student-grade" class="form-select" style="width:100%;" value="${escapeHtml(currentStudent.grade)}">
+                        </div>
+                        <div class="info-group">
+                            <label>Estado:</label>
+                            <select id="edit-student-status" class="form-select" style="width:100%;">
+                                <option value="Activo" ${currentStudent.status === 'Activo' ? 'selected' : ''}>Activo</option>
+                                <option value="Baja" ${currentStudent.status === 'Baja' ? 'selected' : ''}>Baja</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h4><i class="fas fa-female"></i> Datos de la Madre</h4>
+                    <div class="info-grid" style="margin-bottom:20px;">
+                        <div class="info-group"><label>Nombre:</label><input type="text" id="edit-mother-name" class="form-select" style="width:100%;" value="${escapeHtml(m.name)}"></div>
+                        <div class="info-group"><label>Teléfono:</label><input type="text" id="edit-mother-phone" class="form-select" style="width:100%;" value="${escapeHtml(m.phone)}"></div>
+                        <div class="info-group"><label>Dirección:</label><input type="text" id="edit-mother-address" class="form-select" style="width:100%;" value="${escapeHtml(m.address)}"></div>
+                        <div class="info-group"><label>Correo:</label><input type="email" id="edit-mother-email" class="form-select" style="width:100%;" value="${escapeHtml(m.email)}"></div>
+                        <div class="info-group"><label>Profesión:</label><input type="text" id="edit-mother-profession" class="form-select" style="width:100%;" value="${escapeHtml(m.profession)}"></div>
+                        <div class="info-group"><label>Es Tutor:</label><input type="checkbox" id="edit-mother-tutor" ${m.isTutor ? 'checked' : ''}></div>
+                    </div>
+
+                    <h4><i class="fas fa-male"></i> Datos del Padre</h4>
+                    <div class="info-grid" style="margin-bottom:20px;">
+                        <div class="info-group"><label>Nombre:</label><input type="text" id="edit-father-name" class="form-select" style="width:100%;" value="${escapeHtml(f.name)}"></div>
+                        <div class="info-group"><label>Teléfono:</label><input type="text" id="edit-father-phone" class="form-select" style="width:100%;" value="${escapeHtml(f.phone)}"></div>
+                        <div class="info-group"><label>Dirección:</label><input type="text" id="edit-father-address" class="form-select" style="width:100%;" value="${escapeHtml(f.address)}"></div>
+                        <div class="info-group"><label>Correo:</label><input type="email" id="edit-father-email" class="form-select" style="width:100%;" value="${escapeHtml(f.email)}"></div>
+                        <div class="info-group"><label>Profesión:</label><input type="text" id="edit-father-profession" class="form-select" style="width:100%;" value="${escapeHtml(f.profession)}"></div>
+                        <div class="info-group"><label>Es Tutor:</label><input type="checkbox" id="edit-father-tutor" ${f.isTutor ? 'checked' : ''}></div>
+                    </div>
+
+                    <div style="text-align:right; padding-top:15px; border-top:1px solid #e2e8f0;">
+                        <button onclick="saveStudentEdit()" style="background:#10b981; color:white; border:none; padding:10px 25px; border-radius:8px; font-weight:700; cursor:pointer;"><i class="fas fa-save"></i> Guardar Cambios</button>
+                    </div>
+                </div>
+            `;
         } else if (tab === 'chat') {
             content.innerHTML = `<div id="chat-messages" class="chat-messages"></div><textarea id="chat-input" placeholder="Mensaje..."></textarea><button onclick="sendMessage()">Enviar</button>`;
             renderMessages();
@@ -1776,10 +2245,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!studentDetails[currentStudent.name]) studentDetails[currentStudent.name] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
-        if (!studentDetails[currentStudent.name].payments) studentDetails[currentStudent.name].payments = [];
+        const debtKey = getStudentKey(currentStudent);
+        if (!studentDetails[debtKey]) studentDetails[debtKey] = { mother: { name: 'S/D' }, father: { name: 'S/D' }, payments: [] };
+        if (!studentDetails[debtKey].payments) studentDetails[debtKey].payments = [];
 
-        studentDetails[currentStudent.name].payments.push({
+        studentDetails[debtKey].payments.push({
             type: 'CARGO',
             date: new Date().toLocaleDateString(),
             concept: concept,
@@ -1787,15 +2257,65 @@ document.addEventListener('DOMContentLoaded', () => {
             folio: 'ADEUDO'
         });
 
-        // Ordenar por fecha temporal si se quisiera, pero al agregarlo al final queda como hoy
         saveData();
         switchTab('payments');
         alert(`¡Cargo de $${amount} registrado exitosamente para ${currentStudent.name}!`);
     };
 
+    window.saveStudentEdit = () => {
+        if (!currentStudent) return;
+        const studentKey = getStudentKey(currentStudent);
+
+        // Actualizar datos del alumno
+        const newName = document.getElementById('edit-student-name').value.trim();
+        if (!newName) { alert('El nombre no puede estar vacío.'); return; }
+
+        currentStudent.name = newName;
+        currentStudent.level = document.getElementById('edit-student-level').value;
+        currentStudent.grade = document.getElementById('edit-student-grade').value.trim();
+        currentStudent.status = document.getElementById('edit-student-status').value;
+
+        // Actualizar datos familiares
+        if (!studentDetails[studentKey]) {
+            studentDetails[studentKey] = { mother: {}, father: {}, payments: [] };
+        }
+
+        studentDetails[studentKey].mother = {
+            name: document.getElementById('edit-mother-name').value.trim(),
+            phone: document.getElementById('edit-mother-phone').value.trim(),
+            address: document.getElementById('edit-mother-address').value.trim(),
+            email: document.getElementById('edit-mother-email').value.trim(),
+            profession: document.getElementById('edit-mother-profession').value.trim(),
+            isTutor: document.getElementById('edit-mother-tutor').checked
+        };
+
+        studentDetails[studentKey].father = {
+            name: document.getElementById('edit-father-name').value.trim(),
+            phone: document.getElementById('edit-father-phone').value.trim(),
+            address: document.getElementById('edit-father-address').value.trim(),
+            email: document.getElementById('edit-father-email').value.trim(),
+            profession: document.getElementById('edit-father-profession').value.trim(),
+            isTutor: document.getElementById('edit-father-tutor').checked
+        };
+
+        // Preservar pagos existentes
+        if (!studentDetails[studentKey].payments) {
+            studentDetails[studentKey].payments = [];
+        }
+
+        // Actualizar modal header
+        document.getElementById('modal-student-name').innerText = currentStudent.name;
+        document.getElementById('modal-student-level').innerText = currentStudent.level;
+        document.getElementById('modal-student-grade').innerText = currentStudent.grade;
+
+        saveData();
+        alert('Datos del alumno actualizados correctamente.');
+    };
+
     window.deleteStudentPayment = (index) => {
         if (confirm("¿Seguro que deseas eliminar este registro del Estado de Cuenta? (No alterará el saldo global de la caja)")) {
-            studentDetails[currentStudent.name].payments.splice(index, 1);
+            const delKey = getStudentKey(currentStudent);
+            studentDetails[delKey].payments.splice(index, 1);
             saveData();
             switchTab('payments');
         }
@@ -1831,7 +2351,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- CHAT LOGIC ---
 
     function renderMessages() {
-        const history = chatHistories[currentStudent.name] || [];
+        const chatKey = getStudentKey(currentStudent);
+        const history = chatHistories[chatKey] || [];
         const container = document.getElementById('chat-messages');
         if (!container) return;
         container.innerHTML = history.map(m => `<div class="message ${m.type}">${m.text}</div>`).join('');
@@ -1840,8 +2361,9 @@ document.addEventListener('DOMContentLoaded', () => {
     window.sendMessage = () => {
         const input = document.getElementById('chat-input');
         if (!input.value) return;
-        if (!chatHistories[currentStudent.name]) chatHistories[currentStudent.name] = [];
-        chatHistories[currentStudent.name].push({ type: 'sent', text: input.value });
+        const chatKey = getStudentKey(currentStudent);
+        if (!chatHistories[chatKey]) chatHistories[chatKey] = [];
+        chatHistories[chatKey].push({ type: 'sent', text: input.value });
         input.value = '';
         renderMessages();
     };
@@ -1862,7 +2384,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('nav-reports').addEventListener('click', (e) => { e.preventDefault(); showReports(); });
-    groupFilter.addEventListener('change', (e) => showStudents(e.target.value));
+    groupFilter.addEventListener('change', (e) => showStudents(e.target.value, 1));
 
     window.closeStudentModal = () => studentModal.style.display = 'none';
     window.closeTeacherModal = () => teacherModal.style.display = 'none';
@@ -1875,6 +2397,80 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target === tutorModal) closeTutorModal();
         if (e.target === document.getElementById('chat-modal')) closeChatModal();
     };
+
+    // --- BÚSQUEDA GLOBAL ---
+    const searchInput = document.querySelector('#top-search-bar input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim().toLowerCase();
+            if (query.length < 2) return;
+
+            // Buscar en alumnos, maestros y tutores
+            const matchedStudents = allStudents.filter(s => s.name.toLowerCase().includes(query));
+            const matchedTeachers = teachers.filter(t => t.name.toLowerCase().includes(query));
+            const matchedTutors = tutors.filter(t => t.name.toLowerCase().includes(query));
+
+            if (matchedStudents.length === 0 && matchedTeachers.length === 0 && matchedTutors.length === 0) return;
+
+            // Mostrar resultados en la tabla principal
+            dashboardHome.style.display = 'none';
+            recentActivity.style.display = 'block';
+            viewTitle.innerText = `Resultados de búsqueda: "${e.target.value.trim()}"`;
+            btnBack.style.display = 'none';
+            groupFilter.style.display = 'none';
+            document.getElementById('main-table-container').style.display = 'block';
+            document.getElementById('batch-capture-container').style.display = 'none';
+            document.getElementById('payments-capture-container').style.display = 'none';
+            document.getElementById('reports-container').style.display = 'none';
+            document.getElementById('services-batch-container').style.display = 'none';
+            document.getElementById('expenses-container').style.display = 'none';
+
+            tableHead.innerHTML = `<th>Nombre</th><th>Tipo</th><th>Detalle</th><th>Acción</th>`;
+            tableBody.innerHTML = '';
+
+            matchedStudents.forEach(s => {
+                const sId = getStudentKey(s);
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${escapeHtml(s.name)}</strong></td>
+                    <td><span style="background:#dbeafe; color:#1e40af; padding:3px 8px; border-radius:4px; font-size:0.75rem;">Alumno</span></td>
+                    <td>${escapeHtml(s.level)} - ${escapeHtml(s.grade)} (${s.status})</td>
+                    <td><button class="btn-action" onclick="viewExpedienteById('${sId}')">Ver Expediente</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            matchedTeachers.forEach(t => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${escapeHtml(t.name)}</strong></td>
+                    <td><span style="background:#dcfce7; color:#166534; padding:3px 8px; border-radius:4px; font-size:0.75rem;">Profesor</span></td>
+                    <td>${escapeHtml(t.level || '')} - ${escapeHtml(t.profession || '')}</td>
+                    <td><button class="btn-action" onclick="viewTeacherExpediente('${t.name.replace(/'/g, "\\'")}')">Ver Expediente</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            matchedTutors.forEach(t => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${escapeHtml(t.name)}</strong></td>
+                    <td><span style="background:#fef3c7; color:#92400e; padding:3px 8px; border-radius:4px; font-size:0.75rem;">Tutor</span></td>
+                    <td>${escapeHtml(t.phone || '')} - ${escapeHtml(t.email || '')}</td>
+                    <td><button class="btn-action" onclick="viewTutorExpediente('${t.name.replace(/'/g, "\\'")}')">Ver Datos</button></td>
+                `;
+                tableBody.appendChild(row);
+            });
+        });
+
+        // Limpiar búsqueda al vaciar el input
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                searchInput.value = '';
+                showStudents();
+            }
+        });
+    }
 
     // --- INIT ---
     updateDailyQuote();
