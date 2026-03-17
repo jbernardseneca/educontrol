@@ -397,8 +397,8 @@
     }
 
     function renderPaymentsTab(content) {
-        const studentKey = EC.getStudentKey(S.currentStudent);
-        const history = S.studentDetails[studentKey]?.payments || [];
+        const details = EC.getStudentDetails(S.currentStudent) || {};
+        const history = details.payments || [];
         let balance = 0;
 
         let rowsHTML = history.map((p, index) => {
@@ -529,7 +529,7 @@
     }
 
     function renderDigitalTab(content) {
-        const d = S.studentDetails[EC.getStudentKey(S.currentStudent)] || {};
+        const d = EC.getStudentDetails(S.currentStudent) || {};
         const m = d.mother || { name: 'S/D', phone: 'S/D', address: 'S/D', email: 'S/D', profession: 'S/D', isTutor: false };
         const f = d.father || { name: 'S/D', phone: 'S/D', address: 'S/D', email: 'S/D', profession: 'S/D', isTutor: false };
 
@@ -568,8 +568,7 @@
             alert("Acceso Restringido: Tu rol no tiene permisos para editar datos.");
             return;
         }
-        const studentKey = EC.getStudentKey(S.currentStudent);
-        const d = S.studentDetails[studentKey] || {};
+        const d = EC.getStudentDetails(S.currentStudent) || {};
         const m = d.mother || { name: '', phone: '', address: '', email: '', profession: '', isTutor: false };
         const f = d.father || { name: '', phone: '', address: '', email: '', profession: '', isTutor: false };
 
@@ -665,7 +664,9 @@
         S.currentStudent.status = document.getElementById('edit-student-status').value;
 
         if (!S.studentDetails[studentKey]) {
-            S.studentDetails[studentKey] = { mother: {}, father: {}, payments: [] };
+            // Preserve existing data that may be under the student name
+            const existing = EC.getStudentDetails(S.currentStudent);
+            S.studentDetails[studentKey] = existing || { mother: {}, father: {}, payments: [] };
         }
 
         S.studentDetails[studentKey].mother = {

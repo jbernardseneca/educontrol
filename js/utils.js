@@ -28,20 +28,50 @@ window.EduControl = window.EduControl || {};
         return student.id || student.name;
     };
 
+    // Obtener datos de studentDetails con fallback: busca por id, luego por nombre
+    EC.getStudentDetails = function (student) {
+        const key = EC.getStudentKey(student);
+        if (EC.state.studentDetails[key]) return EC.state.studentDetails[key];
+        // Fallback: buscar por nombre si la key es un id
+        if (student.id && EC.state.studentDetails[student.name]) {
+            return EC.state.studentDetails[student.name];
+        }
+        return null;
+    };
+
     // Migrar datos legacy: asignar IDs a estudiantes sin ID y migrar studentDetails
     EC.migrateStudentIds = function () {
         let migrated = false;
         EC.state.allStudents.forEach(s => {
             if (!s.id) {
                 s.id = EC.generateStudentId();
-                if (EC.state.studentDetails[s.name]) {
+                migrated = true;
+            }
+            // Migrar details/chat de nombre a id si aún están bajo el nombre
+            if (s.id && EC.state.studentDetails[s.name]) {
+                if (!EC.state.studentDetails[s.id]) {
+                    // No data under id yet - move name data to id
                     EC.state.studentDetails[s.id] = EC.state.studentDetails[s.name];
-                    delete EC.state.studentDetails[s.name];
+                } else {
+                    // Both exist - merge: keep id-based entry but copy payments from name if id has none
+                    const idData = EC.state.studentDetails[s.id];
+                    const nameData = EC.state.studentDetails[s.name];
+                    if ((!idData.payments || idData.payments.length === 0) && nameData.payments && nameData.payments.length > 0) {
+                        idData.payments = nameData.payments;
+                    }
+                    if (idData.mother && idData.mother.name === 'S/D' && nameData.mother && nameData.mother.name !== 'S/D') {
+                        idData.mother = nameData.mother;
+                    }
+                    if (idData.father && idData.father.name === 'S/D' && nameData.father && nameData.father.name !== 'S/D') {
+                        idData.father = nameData.father;
+                    }
                 }
-                if (EC.state.chatHistories[s.name]) {
-                    EC.state.chatHistories[s.id] = EC.state.chatHistories[s.name];
-                    delete EC.state.chatHistories[s.name];
-                }
+                delete EC.state.studentDetails[s.name];
+                migrated = true;
+            }
+            if (s.id && EC.state.chatHistories[s.name] && !EC.state.chatHistories[s.id]) {
+                EC.state.chatHistories[s.id] = EC.state.chatHistories[s.name];
+                delete EC.state.chatHistories[s.name];
                 migrated = true;
             }
         });

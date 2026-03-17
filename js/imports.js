@@ -59,8 +59,7 @@
         if (S.allStudents.length === 0) { alert('No hay alumnos para exportar.'); return; }
 
         const data = S.allStudents.map(s => {
-            const key = EC.getStudentKey(s);
-            const d = S.studentDetails[key] || {};
+            const d = EC.getStudentDetails(s) || {};
             const m = d.mother || {};
             const f = d.father || {};
             return {
@@ -469,7 +468,13 @@
 
                     const existKey = EC.getStudentKey(existing);
                     if (!S.studentDetails[existKey]) {
-                        S.studentDetails[existKey] = { mother: { name: 'S/D', phone: phone }, father: { name: 'S/D', phone: phone }, payments: [] };
+                        // Check if data exists under name (legacy) before creating empty entry
+                        const existingData = EC.getStudentDetails(existing);
+                        S.studentDetails[existKey] = existingData || { mother: { name: 'S/D', phone: phone }, father: { name: 'S/D', phone: phone }, payments: [] };
+                        // Clean up legacy name key if migrated
+                        if (existing.id && S.studentDetails[existing.name]) {
+                            delete S.studentDetails[existing.name];
+                        }
                     }
                     if (phone && S.studentDetails[existKey].mother) {
                         S.studentDetails[existKey].mother.phone = phone;
