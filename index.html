@@ -276,6 +276,18 @@
         .footer-socials a { color: rgba(255,255,255,0.35); font-size: 1.2rem; transition: color 0.2s; }
         .footer-socials a:hover { color: var(--gold-soft); }
 
+        /* ---- FLOATING WHATSAPP BUTTON (mobile) ---- */
+        .wa-float {
+            display: none; position: fixed; bottom: 24px; right: 20px; z-index: 99;
+            width: 60px; height: 60px; border-radius: 50%;
+            background: #25d366; color: white; font-size: 1.7rem;
+            border: none; cursor: pointer; text-decoration: none;
+            align-items: center; justify-content: center;
+            box-shadow: 0 4px 20px rgba(37,211,102,0.4);
+            transition: transform 0.2s;
+        }
+        .wa-float:hover { transform: scale(1.1); }
+
         /* ---- RESPONSIVE ---- */
         @media (max-width: 1024px) {
             .features-grid { grid-template-columns: repeat(2, 1fr); }
@@ -286,39 +298,93 @@
             .hero-desc { margin-left: auto; margin-right: auto; }
             .hero-buttons { justify-content: center; }
             .hero-stats { justify-content: center; }
-            .hero-visual { margin-top: 48px; }
+            .hero-visual { margin-top: 40px; }
             .hero h1 { font-size: 2.6rem; }
             .about-grid { grid-template-columns: 1fr; gap: 48px; }
             .footer-grid { grid-template-columns: 1fr 1fr; }
             .nav-links { display: none; }
             .menu-toggle { display: block; }
+            .wa-float { display: flex; }
         }
         @media (max-width: 600px) {
-            .hero { padding-top: 110px; }
-            .hero h1 { font-size: 2.1rem; letter-spacing: -1px; }
-            .hero-desc { font-size: 1.05rem; }
-            .btn-hero-primary, .btn-hero-secondary { padding: 16px 28px; font-size: 1.05rem; width: 100%; justify-content: center; }
-            .hero-grid { grid-template-columns: 1fr; max-width: 240px; }
-            .hero-card:nth-child(2) { margin-top: 0; }
-            .hero-card:nth-child(3) { margin-top: 0; }
-            .hero-stats { flex-direction: column; gap: 20px; align-items: center; }
-            .features-grid { grid-template-columns: 1fr; }
-            .section-header h2 { font-size: 1.9rem; }
-            .about-left h2 { font-size: 1.9rem; }
-            .cta h2 { font-size: 1.9rem; }
-            .btn-cta-primary, .btn-cta-secondary { padding: 16px 28px; font-size: 1.05rem; width: 100%; justify-content: center; }
-            .footer-grid { grid-template-columns: 1fr; }
-            .footer-bottom { flex-direction: column; gap: 12px; text-align: center; }
+            .navbar { height: 64px; padding: 0 4%; }
+            .navbar-logo .logo-icon { width: 38px; height: 38px; font-size: 1.1rem; }
+            .navbar-logo .logo-text { font-size: 1.05rem; }
+            .navbar-logo small { font-size: 0.6rem; }
+
+            .hero { padding: 90px 6% 50px; min-height: auto; }
+            .hero h1 { font-size: 2rem; letter-spacing: -0.8px; margin-bottom: 18px; }
+            .hero-badge { font-size: 0.75rem; padding: 8px 14px; margin-bottom: 20px; }
+            .hero-desc { font-size: 0.95rem; margin-bottom: 28px; line-height: 1.65; }
+            .btn-hero-primary, .btn-hero-secondary {
+                padding: 16px 24px; font-size: 1.05rem;
+                width: 100%; justify-content: center; border-radius: 12px;
+            }
+            .hero-visual { display: none; }
+            .hero-stats {
+                flex-direction: row; gap: 0; margin-top: 36px; padding-top: 24px;
+                justify-content: space-between;
+            }
+            .hero-stat { text-align: center; flex: 1; }
+            .hero-stat .number { font-size: 1.6rem; }
+            .hero-stat .label { font-size: 0.7rem; }
+
+            .features { padding: 60px 5%; }
+            .section-header { margin-bottom: 36px; }
+            .section-header h2 { font-size: 1.7rem; letter-spacing: -0.5px; }
+            .section-header p { font-size: 0.95rem; }
+            .section-tag { font-size: 0.75rem; padding: 6px 14px; }
+            .features-grid { grid-template-columns: 1fr; gap: 16px; }
+            .feature-card { padding: 28px 24px; border-radius: 16px; }
+            .feature-icon { width: 48px; height: 48px; font-size: 1.2rem; margin-bottom: 16px; }
+            .feature-card h3 { font-size: 1.05rem; }
+            .feature-card p { font-size: 0.88rem; }
+
+            .about { padding: 60px 5%; }
+            .about-left h2 { font-size: 1.7rem; margin-bottom: 18px; }
+            .about-left p { font-size: 0.95rem; }
+            .about-quote { padding: 20px 20px 20px 24px; font-size: 0.95rem; }
+            .about-grid { gap: 36px; }
+            .value-item { padding: 20px; gap: 16px; }
+            .value-icon { width: 42px; height: 42px; min-width: 42px; font-size: 1rem; }
+            .value-item h4 { font-size: 0.95rem; }
+            .value-item p { font-size: 0.85rem; }
+
+            .cta { padding: 60px 5%; }
+            .cta h2 { font-size: 1.7rem; }
+            .cta p { font-size: 1rem; margin-bottom: 28px; }
+            .cta-tag { font-size: 0.75rem; }
+            .btn-cta-primary, .btn-cta-secondary {
+                padding: 16px 24px; font-size: 1.05rem;
+                width: 100%; justify-content: center; border-radius: 12px;
+            }
+
+            .footer { padding: 40px 5% 20px; }
+            .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+            .footer-brand p { font-size: 0.85rem; }
+            .footer-col h4 { margin-bottom: 12px; font-size: 0.8rem; }
+            .footer-col a { font-size: 0.85rem; margin-bottom: 10px; }
+            .footer-divider { margin-top: 28px; }
+            .footer-bottom { flex-direction: column; gap: 12px; text-align: center; font-size: 0.8rem; padding-bottom: 80px; }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 380px) {
+            .hero h1 { font-size: 1.75rem; }
+            .hero-stat .number { font-size: 1.4rem; }
+            .section-header h2, .about-left h2, .cta h2 { font-size: 1.5rem; }
         }
 
         .nav-links.show {
             display: flex !important; flex-direction: column;
             position: absolute; top: 100%; left: 0; right: 0;
-            background: var(--navy); padding: 20px; gap: 4px;
+            background: var(--navy); padding: 16px 20px; gap: 2px;
             box-shadow: 0 12px 24px rgba(0,0,0,0.3);
             border-bottom: 3px solid var(--gold);
         }
-        .nav-links.show .btn-portal { margin-top: 8px; }
+        .nav-links.show a { padding: 14px 16px; font-size: 1rem; border-radius: 10px; color: rgba(255,255,255,0.8); }
+        .nav-links.show a:hover { background: rgba(255,255,255,0.08); color: white; }
+        .nav-links.show .btn-portal { margin-top: 8px; text-align: center; justify-content: center; }
     </style>
 </head>
 <body>
@@ -562,6 +628,12 @@
             </div>
         </div>
     </footer>
+
+    <!-- FLOATING WHATSAPP -->
+    <a href="https://wa.me/522712119372?text=Hola%2C%20me%20interesa%20informaci%C3%B3n%20sobre%20inscripciones%20en%20Educativo%20Seneca"
+       class="wa-float" target="_blank" aria-label="WhatsApp">
+        <i class="fab fa-whatsapp"></i>
+    </a>
 
     <script>
         window.addEventListener('scroll', () => {
